@@ -5869,6 +5869,18 @@ bool RenderingDeviceDriverD3D12::has_feature(Features p_feature) {
 			return false;
 		case SUPPORTS_HDR_OUTPUT:
 			return true;
+		case SUPPORTS_XESS: {
+			// XeSS is Windows-only and the D3D12 backend is also Windows-only.
+			static int xess_available = -1; // -1 = unchecked, 0 = no, 1 = yes
+			if (xess_available < 0) {
+				void *lib = nullptr;
+				xess_available = (OS::get_singleton()->open_dynamic_library("libxess.dll", lib) == OK) ? 1 : 0;
+				if (lib) {
+					OS::get_singleton()->close_dynamic_library(lib);
+				}
+			}
+			return xess_available == 1;
+		}
 		default:
 			return false;
 	}

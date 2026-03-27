@@ -7343,21 +7343,12 @@ bool RenderingDeviceDriverVulkan::has_feature(Features p_feature) {
 		case SUPPORTS_RAYTRACING_PIPELINE:
 			return acceleration_structure_capabilities.acceleration_structure_support && raytracing_capabilities.raytracing_pipeline_support;
 		case SUPPORTS_XESS: {
+			// XeSS is Windows-only. libxess.dll supports both Vulkan and D3D12 backends.
 #if defined(WINDOWS_ENABLED)
 			static int xess_available = -1; // -1 = unchecked, 0 = no, 1 = yes
 			if (xess_available < 0) {
 				void *lib = nullptr;
 				xess_available = (OS::get_singleton()->open_dynamic_library("libxess.dll", lib) == OK) ? 1 : 0;
-				if (lib) {
-					OS::get_singleton()->close_dynamic_library(lib);
-				}
-			}
-			return xess_available == 1;
-#elif defined(LINUXBSD_ENABLED)
-			static int xess_available = -1;
-			if (xess_available < 0) {
-				void *lib = nullptr;
-				xess_available = (OS::get_singleton()->open_dynamic_library("libxess.so", lib) == OK) ? 1 : 0;
 				if (lib) {
 					OS::get_singleton()->close_dynamic_library(lib);
 				}

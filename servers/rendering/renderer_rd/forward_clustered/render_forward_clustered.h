@@ -46,7 +46,7 @@
 #include "servers/rendering/renderer_rd/effects/metal_fx.h"
 #endif
 
-#ifdef VULKAN_ENABLED
+#if defined(VULKAN_ENABLED) || defined(D3D12_ENABLED)
 #include "servers/rendering/renderer_rd/effects/xess.h"
 #endif
 
@@ -103,7 +103,7 @@ public:
 #ifdef METAL_MFXTEMPORAL_ENABLED
 		RendererRD::MFXTemporalContext *mfx_temporal_context = nullptr;
 #endif
-#ifdef VULKAN_ENABLED
+#if defined(VULKAN_ENABLED) || defined(D3D12_ENABLED)
 		RendererRD::XeSSContext *xess_context = nullptr;
 #endif
 
@@ -157,7 +157,7 @@ public:
 		RendererRD::MFXTemporalContext *get_mfx_temporal_context() const { return mfx_temporal_context; }
 #endif
 
-#ifdef VULKAN_ENABLED
+#if defined(VULKAN_ENABLED) || defined(D3D12_ENABLED)
 		void ensure_xess(RendererRD::XeSSEffect *p_effect);
 		RendererRD::XeSSContext *get_xess_context() const { return xess_context; }
 #endif
@@ -757,7 +757,7 @@ private:
 	RendererRD::MFXTemporalEffect *mfx_temporal_effect = nullptr;
 #endif
 
-#ifdef VULKAN_ENABLED
+#if defined(VULKAN_ENABLED) || defined(D3D12_ENABLED)
 	RendererRD::XeSSEffect *xess_effect = nullptr;
 #endif
 

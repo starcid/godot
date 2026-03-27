@@ -30,7 +30,7 @@
 
 #pragma once
 
-#ifdef VULKAN_ENABLED
+#if defined(VULKAN_ENABLED) || defined(D3D12_ENABLED)
 
 #include "core/math/vector2.h"
 #include "core/math/vector2i.h"
@@ -38,8 +38,10 @@
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_device_driver.h"
 
+#ifdef VULKAN_ENABLED
 // Vulkan types needed for callback args (VkImage, VkImageView, VkFormat).
 #include <thirdparty/vulkan/include/vulkan/vulkan_core.h>
+#endif
 
 namespace RendererRD {
 
@@ -81,7 +83,8 @@ public:
 	void upscale(const Parameters &p_params);
 
 private:
-	// Callback args for driver_callback_add.
+#ifdef VULKAN_ENABLED
+	// Callback args for the Vulkan execution path.
 	struct CallbackArgs {
 		XeSSEffect *owner = nullptr;
 		xess_context_handle_t_opaque *xess_handle = nullptr;
@@ -112,22 +115,63 @@ private:
 		uint32_t output_height = 0;
 
 		static void free_cb(CallbackArgs **p_args) {
-			(*p_args)->owner->args_allocator.free(*p_args);
+			(*p_args)->owner->vk_args_allocator.free(*p_args);
 			*p_args = nullptr;
 		}
 	};
 
-	static void callback(RDD *p_driver, RDD::CommandBufferID p_cmd_buffer, CallbackArgs *p_userdata);
+	static void callback_vk(RDD *p_driver, RDD::CommandBufferID p_cmd_buffer, CallbackArgs *p_userdata);
+	PagedAllocator<CallbackArgs, true, 16> vk_args_allocator;
+#endif // VULKAN_ENABLED
 
-	PagedAllocator<CallbackArgs, true, 16> args_allocator;
+#ifdef D3D12_ENABLED
+	// Callback args for the D3D12 execution path.
+	// ID3D12Resource* stored as void* to avoid including Windows D3D12 headers here.
+	struct CallbackArgsD3D12 {
+		XeSSEffect *owner = nullptr;
+		xess_context_handle_t_opaque *xess_handle = nullptr;
+		void *color = nullptr; // ID3D12Resource*
+		void *depth = nullptr; // ID3D12Resource*
+		void *velocity = nullptr; // ID3D12Resource*
+		void *output = nullptr; // ID3D12Resource*
+		float jitter_x = 0.0f;
+		float jitter_y = 0.0f;
+		bool reset = false;
+		uint32_t input_width = 0;
+		uint32_t input_height = 0;
+		uint32_t output_width = 0;
+		uint32_t output_height = 0;
+
+		static void free_cb(CallbackArgsD3D12 **p_args) {
+			(*p_args)->owner->d3d12_args_allocator.free(*p_args);
+			*p_args = nullptr;
+		}
+	};
+
+	static void callback_d3d12(RDD *p_driver, RDD::CommandBufferID p_cmd_buffer, CallbackArgsD3D12 *p_userdata);
+	PagedAllocator<CallbackArgsD3D12, true, 16> d3d12_args_allocator;
+#endif // D3D12_ENABLED
+
 	void *library_handle = nullptr;
+	bool api_d3d12 = false; // true when running under the D3D12 renderer
 
-	// Function pointers loaded from the XeSS shared library.
+	// Shared function pointers (Vulkan and D3D12 share the same libxess.dll).
+	void *fn_xessDestroyContext = nullptr;
+	void *fn_xessGetVersion = nullptr;
+
+#ifdef VULKAN_ENABLED
+	// Vulkan-specific function pointers.
 	void *fn_xessVKCreateContext = nullptr;
 	void *fn_xessVKInit = nullptr;
 	void *fn_xessVKExecute = nullptr;
-	void *fn_xessDestroyContext = nullptr;
-	void *fn_xessGetVersion = nullptr;
+#endif
+
+#ifdef D3D12_ENABLED
+	// D3D12-specific function pointers.
+	void *fn_xessD3D12CreateContext = nullptr;
+	void *fn_xessD3D12Init = nullptr;
+	void *fn_xessD3D12Execute = nullptr;
+#endif
 
 	bool _load_library();
 	void _unload_library();
@@ -135,4 +179,4 @@ private:
 
 } // namespace RendererRD
 
-#endif // VULKAN_ENABLED
+#endif // VULKAN_ENABLED || D3D12_ENABLED
