@@ -1,0 +1,156 @@
+name: 🔧 CI for dev/xess
+
+on:
+  push:
+    branches:
+      - dev/xess
+  pull_request:
+    branches:
+      - dev/xess
+
+concurrency:
+  group: ${{ github.workflow }}|${{ github.ref_name }}
+  cancel-in-progress: true
+
+# Restrict GITHUB_TOKEN to the minimum required permissions.
+permissions:
+  contents: read
+
+# Global build settings
+env:
+  SCONS_FLAGS: >-
+    dev_mode=yes
+    module_text_server_fb_enabled=yes
+
+jobs:
+  # Stage 1: Code style consistency checks (fast, runs first)
+  static-checks:
+    name: 📊 Code Style Checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      sources-changed: ${{ steps.changed-files.outputs.sources_any_changed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: tree:0
+
+      - name: .gitignore checks
+        run: bash ./misc/scripts/gitignore_check.sh
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v47
+        with:
+          safe_output: false
+          separator: '" "'
+          skip_initial_fetch: true
+          files_yaml_from_source_file: .github/changed_files.yml
+
+      - name: Style checks via pre-commit
+        uses: pre-commit/action@v3.0.1
+        env:
+          CHANGED_FILES: '"${{ steps.changed-files.outputs.everything_all_changed_files }}"'
+        with:
+          extra_args: --files ${{ env.CHANGED_FILES }}
+
+  # Stage 2: Build the Linux editor (depends on style checks passing)
+  build:
+    name: 🐧 Build Linux Editor
+    needs: static-checks
+    # Skip build when no source files changed (e.g. docs-only PRs), except on direct pushes.
+    if: needs.static-checks.outputs.sources-changed == 'true' || github.event_name != 'pull_request'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      CACHE_NAME: xess-linux-editor
+      BIN: ./bin/godot.linuxbsd.editor.x86_64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          # libwayland-bin provides wayland-scanner required by the linuxbsd platform driver.
+          sudo apt-get install -y libwayland-bin
+
+      - name: Free disk space
+        run: |
+          echo "Disk usage before:" && df -h
+          sudo rm -rf /usr/local/lib/android
+          echo "Disk usage after:" && df -h
+
+      - name: Restore build cache
+        uses: ./.github/actions/godot-cache-restore
+        with:
+          cache-name: ${{ env.CACHE_NAME }}
+        continue-on-error: true
+
+      - name: Setup Python and SCons
+        uses: ./.github/actions/godot-deps
+
+      - name: Download pre-built AccessKit
+        id: accesskit-sdk
+        shell: sh
+        run: |
+          if python ./misc/scripts/install_accesskit.py; then
+            echo "ACCESSKIT_ENABLED=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::AccessKit SDK installation failed, building without AccessKit support."
+            echo "ACCESSKIT_ENABLED=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compile editor
+        uses: ./.github/actions/godot-build
+        with:
+          platform: linuxbsd
+          target: editor
+          scons-flags: ${{ env.SCONS_FLAGS }} accesskit=${{ steps.accesskit-sdk.outputs.ACCESSKIT_ENABLED }}
+
+      - name: Save build cache
+        uses: ./.github/actions/godot-cache-save
+        with:
+          cache-name: ${{ env.CACHE_NAME }}
+        continue-on-error: true
+
+      - name: Upload editor binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: xess-linux-editor
+          path: bin/godot.linuxbsd.editor.x86_64
+          retention-days: 3
+
+  # Stage 3: Run tests to verify the engine starts and runs correctly
+  test:
+    name: 🧪 Tests
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      BIN: ./bin/godot.linuxbsd.editor.x86_64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download editor binary
+        uses: actions/download-artifact@v4
+        with:
+          name: xess-linux-editor
+          path: bin/
+
+      - name: Make binary executable
+        run: chmod +x ${{ env.BIN }}
+
+      - name: Smoke test – version and help
+        run: |
+          ${{ env.BIN }} --version
+          ${{ env.BIN }} --help
+
+      - name: Run unit tests
+        run: |
+          ${{ env.BIN }} --headless --test --force-colors
