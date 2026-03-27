@@ -177,6 +177,12 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 				WARN_PRINT_ONCE("MetalFX spatial upscaling is not supported by the current renderer or hardware. Falling back to FSR scaling.");
 			}
 
+			if (scaling_3d_mode == RSE::VIEWPORT_SCALING_3D_MODE_XESS && !RD::get_singleton()->has_feature(RD::SUPPORTS_XESS)) {
+				scaling_3d_mode = RSE::VIEWPORT_SCALING_3D_MODE_FSR2;
+				WARN_PRINT_ONCE("XeSS upscaling is not supported by the current renderer or hardware (libxess not found). Falling back to FSR 2 scaling.");
+				scaling_type = RSE::scaling_3d_mode_type(scaling_3d_mode);
+			}
+
 			RSE::ViewportMSAA msaa_3d = p_viewport->msaa_3d;
 
 			// If MetalFX Temporal upscaling is supported, verify limits.
@@ -236,6 +242,7 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 				case RSE::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL:
 				case RSE::VIEWPORT_SCALING_3D_MODE_FSR:
 				case RSE::VIEWPORT_SCALING_3D_MODE_FSR2:
+				case RSE::VIEWPORT_SCALING_3D_MODE_XESS:
 					target_width = p_viewport->size.width;
 					target_height = p_viewport->size.height;
 					render_width = MAX(target_width * scaling_3d_scale, 1.0); // target_width / (target_width * scaling)

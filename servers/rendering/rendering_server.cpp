@@ -2914,6 +2914,7 @@ void RenderingServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(RSE::VIEWPORT_SCALING_3D_MODE_FSR2);
 	BIND_ENUM_CONSTANT(RSE::VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL);
 	BIND_ENUM_CONSTANT(RSE::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL);
+	BIND_ENUM_CONSTANT(RSE::VIEWPORT_SCALING_3D_MODE_XESS);
 	BIND_ENUM_CONSTANT(RSE::VIEWPORT_SCALING_3D_MODE_MAX);
 
 	BIND_ENUM_CONSTANT(RSE::VIEWPORT_UPDATE_DISABLED);
@@ -3748,12 +3749,12 @@ void RenderingServer::init() {
 		String mode_hints;
 		String mode_hints_metal;
 		{
-			Vector<String> mode_hints_arr = { "Bilinear (Fastest)", "FSR 1.0 (Fast)", "FSR 2.2 (Slow)" };
-			mode_hints = String(",").join(mode_hints_arr);
+			// Non-Metal platforms (Linux, Windows): include XeSS.
+			// Use explicit name:value mapping since XESS=5 is not index 3.
+			mode_hints = "Bilinear (Fastest):0,FSR 1.0 (Fast):1,FSR 2.2 (Slow):2,XeSS (Slow):5";
 
-			mode_hints_arr.push_back("MetalFX (Spatial)");
-			mode_hints_arr.push_back("MetalFX (Temporal)");
-			mode_hints_metal = String(",").join(mode_hints_arr);
+			// Metal platforms (macOS, iOS): include MetalFX modes instead of XeSS.
+			mode_hints_metal = "Bilinear (Fastest):0,FSR 1.0 (Fast):1,FSR 2.2 (Slow):2,MetalFX (Spatial):3,MetalFX (Temporal):4";
 		}
 
 		GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/scaling_3d/mode", PROPERTY_HINT_ENUM, mode_hints), 0);

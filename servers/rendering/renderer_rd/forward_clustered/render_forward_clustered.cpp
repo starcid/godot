@@ -108,6 +108,14 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::ensure_mfx_tempor
 }
 #endif
 
+#ifdef VULKAN_ENABLED
+void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_xess(RendererRD::XeSSEffect *p_effect) {
+	if (xess_context == nullptr) {
+		xess_context = p_effect->create_context(render_buffers->get_internal_size(), render_buffers->get_target_size());
+	}
+}
+#endif
+
 void RenderForwardClustered::RenderBufferDataForwardClustered::free_data() {
 	// JIC, should already have been cleared
 	if (render_buffers) {
@@ -132,6 +140,13 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::free_data() {
 	if (mfx_temporal_context) {
 		memdelete(mfx_temporal_context);
 		mfx_temporal_context = nullptr;
+	}
+#endif
+
+#ifdef VULKAN_ENABLED
+	if (xess_context) {
+		memdelete(xess_context);
+		xess_context = nullptr;
 	}
 #endif
 
@@ -1760,6 +1775,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		SCALE_NONE,
 		SCALE_FSR2,
 		SCALE_MFX,
+		SCALE_XESS,
 	} scale_type = SCALE_NONE;
 
 	switch (rb->get_scaling_3d_mode()) {
@@ -1771,6 +1787,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			scale_type = SCALE_MFX;
 #else
 			scale_type = SCALE_NONE;
+#endif
+			break;
+		case RSE::VIEWPORT_SCALING_3D_MODE_XESS:
+#ifdef VULKAN_ENABLED
+			if (xess_effect && xess_effect->is_available()) {
+				scale_type = SCALE_XESS;
+			}
 #endif
 			break;
 		default:
@@ -2502,6 +2525,33 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				params.reset = reset;
 
 				mfx_temporal_effect->process(rb_data->get_mfx_temporal_context(), params);
+			}
+
+			RD::get_singleton()->draw_command_end_label();
+#endif
+		} else if (scale_type == SCALE_XESS) {
+#ifdef VULKAN_ENABLED
+			rb_data->ensure_xess(xess_effect);
+
+			RD::get_singleton()->draw_command_begin_label("XeSS");
+			RENDER_TIMESTAMP("XeSS");
+
+			// XeSS expects jitter in the range [-0.5, 0.5] (NDC jitter scale).
+			Vector2 jitter = p_render_data->scene_data->taa_jitter * 0.5f;
+
+			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
+				RendererRD::XeSSEffect::Parameters params;
+				params.context = rb_data->get_xess_context();
+				params.internal_size = rb->get_internal_size();
+				params.color = rb->get_internal_texture(v);
+				params.depth = rb->get_depth_texture(v);
+				params.velocity = rb->get_velocity_buffer(false, v);
+				params.output = rb->get_upscaled_texture(v);
+				params.jitter = jitter;
+				params.delta_time = float(time_step);
+				params.reset_accumulation = false; // FIXME: The engine does not provide a way to reset the accumulation.
+
+				xess_effect->upscale(params);
 			}
 
 			RD::get_singleton()->draw_command_end_label();
@@ -5138,6 +5188,14 @@ RenderForwardClustered::RenderForwardClustered() {
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
 	mfx_temporal_effect = memnew(RendererRD::MFXTemporalEffect);
 #endif
+#ifdef VULKAN_ENABLED
+	xess_effect = memnew(RendererRD::XeSSEffect);
+	if (!xess_effect->is_available()) {
+		// Library not present; keep the object so that fallback detection works
+		// but the feature simply won't be used.
+		print_verbose("XeSS: libxess not found. XeSS upscaling will be unavailable.");
+	}
+#endif
 }
 
 RenderForwardClustered::~RenderForwardClustered() {
@@ -5165,6 +5223,13 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (motion_vectors_store) {
 		memdelete(motion_vectors_store);
 		motion_vectors_store = nullptr;
+	}
+#endif
+
+#ifdef VULKAN_ENABLED
+	if (xess_effect) {
+		memdelete(xess_effect);
+		xess_effect = nullptr;
 	}
 #endif
 
