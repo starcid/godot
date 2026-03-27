@@ -25,6 +25,7 @@ env_effects.Prepend(CPPPATH=[thirdparty_dir])
 if env["platform"] == "windows":
     env_effects.Prepend(CPPPATH=["#thirdparty/intel-xess/inc"])
 
+
 def areatex_builder(target, source, env):
     buffer = methods.get_buffer(str(source[0]))
 

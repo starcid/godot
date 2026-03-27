@@ -177,14 +177,14 @@ bool XeSSEffect::_load_library() {
 		return false;
 	}
 
-#define XESS_LOAD_SYMBOL(sym)                                                                                                              \
-	do {                                                                                                                                   \
-		err = OS::get_singleton()->get_dynamic_library_symbol_handle(library_handle, #sym, fn_##sym);                                      \
-		if (err != OK) {                                                                                                                   \
-			print_error("XeSS: Failed to load symbol '" #sym "' from XeSS library. XeSS upscaling will not be available.");               \
-			_unload_library();                                                                                                             \
-			return false;                                                                                                                  \
-		}                                                                                                                                  \
+#define XESS_LOAD_SYMBOL(sym) \
+	do { \
+		err = OS::get_singleton()->get_dynamic_library_symbol_handle(library_handle, #sym, fn_##sym); \
+		if (err != OK) { \
+			print_error("XeSS: Failed to load symbol '" #sym "' from XeSS library. XeSS upscaling will not be available."); \
+			_unload_library(); \
+			return false; \
+		} \
 	} while (0)
 
 	// Shared symbols present in libxess.dll for all backends.
