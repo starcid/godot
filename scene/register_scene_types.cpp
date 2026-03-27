@@ -128,6 +128,7 @@
 #include "scene/resources/external_texture.h"
 #include "scene/resources/font.h"
 #include "scene/resources/gradient.h"
+#include "scene/resources/skill.h"
 #include "scene/resources/gradient_texture.h"
 #include "scene/resources/image_texture.h"
 #include "scene/resources/immediate_mesh.h"
@@ -1123,6 +1124,7 @@ void register_scene_types() {
 
 	GDREGISTER_CLASS(BitMap);
 	GDREGISTER_CLASS(Gradient);
+	GDREGISTER_CLASS(Skill);
 
 	GDREGISTER_CLASS(SkeletonProfile);
 	GDREGISTER_CLASS(SkeletonProfileHumanoid);
