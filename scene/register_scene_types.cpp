@@ -1123,7 +1123,6 @@ void register_scene_types() {
 
 	GDREGISTER_CLASS(BitMap);
 	GDREGISTER_CLASS(Gradient);
-
 	GDREGISTER_CLASS(SkeletonProfile);
 	GDREGISTER_CLASS(SkeletonProfileHumanoid);
 	GDREGISTER_CLASS(BoneMap);
