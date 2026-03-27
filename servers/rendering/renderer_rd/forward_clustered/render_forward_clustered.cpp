@@ -108,7 +108,7 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::ensure_mfx_tempor
 }
 #endif
 
-#if defined(VULKAN_ENABLED) || defined(D3D12_ENABLED)
+#if defined(WINDOWS_ENABLED)
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_xess(RendererRD::XeSSEffect *p_effect) {
 	if (xess_context == nullptr) {
 		xess_context = p_effect->create_context(render_buffers->get_internal_size(), render_buffers->get_target_size());
@@ -143,7 +143,7 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::free_data() {
 	}
 #endif
 
-#if defined(VULKAN_ENABLED) || defined(D3D12_ENABLED)
+#if defined(WINDOWS_ENABLED)
 	if (xess_context) {
 		memdelete(xess_context);
 		xess_context = nullptr;
@@ -1790,7 +1790,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 #endif
 			break;
 		case RSE::VIEWPORT_SCALING_3D_MODE_XESS:
-#if defined(VULKAN_ENABLED) || defined(D3D12_ENABLED)
+#if defined(WINDOWS_ENABLED)
 			if (xess_effect && xess_effect->is_available()) {
 				scale_type = SCALE_XESS;
 			}
@@ -2530,7 +2530,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->draw_command_end_label();
 #endif
 		} else if (scale_type == SCALE_XESS) {
-#if defined(VULKAN_ENABLED) || defined(D3D12_ENABLED)
+#if defined(WINDOWS_ENABLED)
 			rb_data->ensure_xess(xess_effect);
 
 			RD::get_singleton()->draw_command_begin_label("XeSS");
@@ -5188,7 +5188,7 @@ RenderForwardClustered::RenderForwardClustered() {
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
 	mfx_temporal_effect = memnew(RendererRD::MFXTemporalEffect);
 #endif
-#if defined(VULKAN_ENABLED) || defined(D3D12_ENABLED)
+#if defined(WINDOWS_ENABLED)
 	xess_effect = memnew(RendererRD::XeSSEffect);
 	if (!xess_effect->is_available()) {
 		// Library not present; keep the object so that fallback detection works
@@ -5226,7 +5226,7 @@ RenderForwardClustered::~RenderForwardClustered() {
 	}
 #endif
 
-#if defined(VULKAN_ENABLED) || defined(D3D12_ENABLED)
+#if defined(WINDOWS_ENABLED)
 	if (xess_effect) {
 		memdelete(xess_effect);
 		xess_effect = nullptr;

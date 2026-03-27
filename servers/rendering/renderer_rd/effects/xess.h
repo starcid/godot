@@ -30,7 +30,7 @@
 
 #pragma once
 
-#if defined(VULKAN_ENABLED) || defined(D3D12_ENABLED)
+#if defined(WINDOWS_ENABLED)
 
 #include "core/math/vector2.h"
 #include "core/math/vector2i.h"
@@ -179,4 +179,4 @@ private:
 
 } // namespace RendererRD
 
-#endif // VULKAN_ENABLED || D3D12_ENABLED
+#endif // WINDOWS_ENABLED

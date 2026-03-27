@@ -30,7 +30,7 @@
 
 #include "xess.h"
 
-#if defined(VULKAN_ENABLED) || defined(D3D12_ENABLED)
+#if defined(WINDOWS_ENABLED)
 
 #include "core/os/os.h"
 #include "core/string/print_string.h"
@@ -496,4 +496,4 @@ void XeSSEffect::upscale(const Parameters &p_params) {
 #endif // VULKAN_ENABLED
 }
 
-#endif // VULKAN_ENABLED || D3D12_ENABLED
+#endif // WINDOWS_ENABLED
