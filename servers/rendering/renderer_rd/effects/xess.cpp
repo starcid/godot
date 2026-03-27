@@ -46,172 +46,43 @@
 #endif
 
 // ============================================================================
-// Minimal XeSS API type definitions (platform-agnostic part)
+// Intel XeSS SDK headers
 //
-// These declarations mirror the public Intel XeSS SDK C API so that we can
-// call into the dynamically loaded library without bundling Intel's
-// proprietary SDK headers.  The names, types, and values are taken from the
-// publicly documented XeSS 3.0 API.
+// Included without XESS_SHARED_LIB so that XESS_API expands to nothing,
+// making the function declarations plain `extern "C"` prototypes.  We never
+// call those prototypes directly — every XeSS entry point is reached via a
+// function pointer loaded at run time by _load_library() — so the linker does
+// not need libxess.lib at build time.
 // ============================================================================
 
-typedef struct _xess_context_handle_t *xess_context_handle_t;
+#include <thirdparty/intel-xess/inc/xess/xess.h>
 
-typedef struct _xess_2d_t {
-	uint32_t x, y;
-} xess_2d_t;
+#ifdef VULKAN_ENABLED
+#include <thirdparty/intel-xess/inc/xess/xess_vk.h>
+#endif
 
-typedef enum _xess_quality_settings_t {
-	XESS_QUALITY_SETTING_ULTRA_PERFORMANCE = 100,
-	XESS_QUALITY_SETTING_PERFORMANCE = 101,
-	XESS_QUALITY_SETTING_BALANCED = 102,
-	XESS_QUALITY_SETTING_QUALITY = 103,
-	XESS_QUALITY_SETTING_ULTRA_QUALITY = 104,
-	XESS_QUALITY_SETTING_ULTRA_QUALITY_PLUS = 105,
-	XESS_QUALITY_SETTING_AA = 106,
-} xess_quality_settings_t;
+#ifdef D3D12_ENABLED
+#include <thirdparty/intel-xess/inc/xess/xess_d3d12.h>
+#endif
 
-typedef enum _xess_result_t {
-	XESS_RESULT_SUCCESS = 0,
-	XESS_RESULT_ERROR_UNSUPPORTED_DEVICE = -1,
-	XESS_RESULT_ERROR_UNSUPPORTED_DRIVER = -2,
-	XESS_RESULT_ERROR_UNINITIALIZED = -3,
-	XESS_RESULT_ERROR_INVALID_ARGUMENT = -4,
-	XESS_RESULT_ERROR_DEVICE_OUT_OF_MEMORY = -5,
-	XESS_RESULT_ERROR_DEVICE = -6,
-	XESS_RESULT_ERROR_NOT_IMPLEMENTED = -7,
-	XESS_RESULT_ERROR_INVALID_CONTEXT = -8,
-	XESS_RESULT_ERROR_OPERATION_IN_PROGRESS = -9,
-	XESS_RESULT_ERROR_UNSUPPORTED = -10,
-	XESS_RESULT_ERROR_CANT_LOAD_LIBRARY = -11,
-	XESS_RESULT_ERROR_WRONG_CALL_ORDER = -12,
-	XESS_RESULT_ERROR_UNKNOWN = -1000,
-} xess_result_t;
+// ============================================================================
+// Function pointer types for dynamic loading
+// ============================================================================
 
-typedef enum _xess_init_flags_t {
-	XESS_INIT_FLAG_NONE = 0,
-	XESS_INIT_FLAG_HIGH_RES_MV = 1 << 0,
-	XESS_INIT_FLAG_INVERTED_DEPTH = 1 << 1,
-	XESS_INIT_FLAG_EXPOSURE_SCALE_TEXTURE = 1 << 2,
-	XESS_INIT_FLAG_RESPONSIVE_PIXEL_MASK = 1 << 3,
-	XESS_INIT_FLAG_USE_NDC_VELOCITY = 1 << 4,
-	XESS_INIT_FLAG_EXTERNAL_DESCRIPTOR_HEAP = 1 << 5,
-	XESS_INIT_FLAG_LDR_INPUT_COLOR = 1 << 6,
-	XESS_INIT_FLAG_JITTERED_MV = 1 << 7,
-	XESS_INIT_FLAG_ENABLE_AUTOEXPOSURE = 1 << 8,
-} xess_init_flags_t;
-
-typedef struct _xess_version_t {
-	uint16_t major, minor, patch, reserved;
-} xess_version_t;
-
-typedef struct _xess_coord_t {
-	uint32_t x, y;
-} xess_coord_t;
-
-// Shared function pointer types.
 typedef xess_result_t (*PFN_xessDestroyContext)(xess_context_handle_t);
 typedef xess_result_t (*PFN_xessGetVersion)(xess_version_t *);
 
-// ============================================================================
-// Vulkan-specific XeSS API types
-// ============================================================================
 #ifdef VULKAN_ENABLED
-
-typedef struct _xess_vk_image_view_info {
-	VkImageView imageView;
-	VkImage image;
-	VkImageSubresourceRange subresourceRange;
-	VkFormat format;
-	unsigned int width;
-	unsigned int height;
-} xess_vk_image_view_info;
-
-typedef struct _xess_vk_execute_params_t {
-	xess_vk_image_view_info colorTexture;
-	xess_vk_image_view_info velocityTexture;
-	xess_vk_image_view_info depthTexture;
-	xess_vk_image_view_info exposureScaleTexture;
-	xess_vk_image_view_info responsivePixelMaskTexture;
-	xess_vk_image_view_info outputTexture;
-	float jitterOffsetX;
-	float jitterOffsetY;
-	float exposureScale;
-	uint32_t resetHistory;
-	uint32_t inputWidth;
-	uint32_t inputHeight;
-	xess_coord_t inputColorBase;
-	xess_coord_t inputMotionVectorBase;
-	xess_coord_t inputDepthBase;
-	xess_coord_t inputResponsiveMaskBase;
-	xess_coord_t reserved0;
-	xess_coord_t outputColorBase;
-} xess_vk_execute_params_t;
-
-typedef struct _xess_vk_init_params_t {
-	xess_2d_t outputResolution;
-	xess_quality_settings_t qualitySetting;
-	uint32_t initFlags;
-	uint32_t creationNodeMask;
-	uint32_t visibleNodeMask;
-	VkDeviceMemory tempBufferHeap;
-	uint64_t bufferHeapOffset;
-	VkDeviceMemory tempTextureHeap;
-	uint64_t textureHeapOffset;
-	VkPipelineCache pipelineCache;
-} xess_vk_init_params_t;
-
 typedef xess_result_t (*PFN_xessVKCreateContext)(VkInstance, VkPhysicalDevice, VkDevice, xess_context_handle_t *);
 typedef xess_result_t (*PFN_xessVKInit)(xess_context_handle_t, const xess_vk_init_params_t *);
 typedef xess_result_t (*PFN_xessVKExecute)(xess_context_handle_t, VkCommandBuffer, const xess_vk_execute_params_t *);
+#endif
 
-#endif // VULKAN_ENABLED
-
-// ============================================================================
-// D3D12-specific XeSS API types
-// ============================================================================
 #ifdef D3D12_ENABLED
-
-typedef struct _xess_d3d12_execute_params_t {
-	ID3D12Resource *pColorTexture;
-	ID3D12Resource *pVelocityTexture;
-	ID3D12Resource *pDepthTexture;
-	ID3D12Resource *pExposureScaleTexture;
-	ID3D12Resource *pResponsivePixelMaskTexture;
-	ID3D12Resource *pOutputTexture;
-	float jitterOffsetX;
-	float jitterOffsetY;
-	float exposureScale;
-	uint32_t resetHistory;
-	uint32_t inputWidth;
-	uint32_t inputHeight;
-	xess_coord_t inputColorBase;
-	xess_coord_t inputMotionVectorBase;
-	xess_coord_t inputDepthBase;
-	xess_coord_t inputResponsiveMaskBase;
-	xess_coord_t reserved0;
-	xess_coord_t outputColorBase;
-	ID3D12DescriptorHeap *pDescriptorHeap; // nullptr = use internal heap
-	uint32_t descriptorHeapOffset;
-} xess_d3d12_execute_params_t;
-
-typedef struct _xess_d3d12_init_params_t {
-	xess_2d_t outputResolution;
-	xess_quality_settings_t qualitySetting;
-	uint32_t initFlags;
-	uint32_t creationNodeMask;
-	uint32_t visibleNodeMask;
-	ID3D12Heap *pTempBufferHeap;
-	uint64_t bufferHeapOffset;
-	ID3D12Heap *pTempTextureHeap;
-	uint64_t textureHeapOffset;
-	ID3D12PipelineLibrary *pPipelineLibrary;
-} xess_d3d12_init_params_t;
-
 typedef xess_result_t (*PFN_xessD3D12CreateContext)(ID3D12Device *, xess_context_handle_t *);
 typedef xess_result_t (*PFN_xessD3D12Init)(xess_context_handle_t, const xess_d3d12_init_params_t *);
 typedef xess_result_t (*PFN_xessD3D12Execute)(xess_context_handle_t, ID3D12GraphicsCommandList *, const xess_d3d12_execute_params_t *);
-
-#endif // D3D12_ENABLED
+#endif
 
 // ============================================================================
 

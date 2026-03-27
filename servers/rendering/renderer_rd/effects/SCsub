@@ -21,6 +21,9 @@ thirdparty_sources = [thirdparty_dir + file for file in thirdparty_sources]
 
 env_effects.Prepend(CPPPATH=[thirdparty_dir])
 
+# Intel XeSS SDK headers (Windows-only; library is loaded dynamically at run time).
+if env["platform"] == "windows":
+    env_effects.Prepend(CPPPATH=["#thirdparty/intel-xess/inc"])
 
 def areatex_builder(target, source, env):
     buffer = methods.get_buffer(str(source[0]))
