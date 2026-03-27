@@ -40,7 +40,7 @@
 
 #ifdef VULKAN_ENABLED
 // Vulkan types needed for callback args (VkImage, VkImageView, VkFormat).
-#include <thirdparty/vulkan/include/vulkan/vulkan_core.h>
+#include <vulkan/vulkan_core.h>
 #endif
 
 namespace RendererRD {
