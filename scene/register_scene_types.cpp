@@ -146,7 +146,6 @@
 #include "scene/resources/portable_compressed_texture.h"
 #include "scene/resources/resource_format_text.h"
 #include "scene/resources/shader_include.h"
-#include "scene/resources/skill.h"
 #include "scene/resources/skeleton_profile.h"
 #include "scene/resources/sky.h"
 #include "scene/resources/style_box.h"
@@ -1124,8 +1123,6 @@ void register_scene_types() {
 
 	GDREGISTER_CLASS(BitMap);
 	GDREGISTER_CLASS(Gradient);
-	GDREGISTER_CLASS(Skill);
-
 	GDREGISTER_CLASS(SkeletonProfile);
 	GDREGISTER_CLASS(SkeletonProfileHumanoid);
 	GDREGISTER_CLASS(BoneMap);
