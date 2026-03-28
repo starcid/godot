@@ -408,6 +408,7 @@ public:
 	virtual bool command_buffer_begin_secondary(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, uint32_t p_subpass, FramebufferID p_framebuffer) override final;
 	virtual void command_buffer_end(CommandBufferID p_cmd_buffer) override final;
 	virtual void command_buffer_execute_secondary(CommandBufferID p_cmd_buffer, VectorView<CommandBufferID> p_secondary_cmd_buffers) override final;
+	static VkCommandBuffer command_buffer_vk(CommandBufferID p_cmd_buffer) { return ((CommandBufferInfo *)(p_cmd_buffer.id))->vk_command_buffer; }
 
 	/********************/
 	/**** SWAP CHAIN ****/

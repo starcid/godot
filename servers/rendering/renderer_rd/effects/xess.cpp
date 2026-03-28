@@ -346,9 +346,7 @@ XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_
 #ifdef VULKAN_ENABLED
 
 void XeSSEffect::callback_vk(RDD *p_driver, RDD::CommandBufferID p_cmd_buffer, CallbackArgs *p_userdata) {
-	const RenderingDeviceDriverVulkan::CommandBufferInfo *cmd_info =
-			(const RenderingDeviceDriverVulkan::CommandBufferInfo *)(p_cmd_buffer.id);
-	VkCommandBuffer vk_cmd = cmd_info->vk_command_buffer;
+	VkCommandBuffer vk_cmd = RenderingDeviceDriverVulkan::command_buffer_vk(p_cmd_buffer);
 
 	xess_vk_execute_params_t exec_params = {};
 	exec_params.colorTexture = _make_image_view_info(
@@ -389,9 +387,7 @@ void XeSSEffect::callback_vk(RDD *p_driver, RDD::CommandBufferID p_cmd_buffer, C
 #ifdef D3D12_ENABLED
 
 void XeSSEffect::callback_d3d12(RDD *p_driver, RDD::CommandBufferID p_cmd_buffer, CallbackArgsD3D12 *p_userdata) {
-	const RenderingDeviceDriverD3D12::CommandBufferInfo *cmd_info =
-			(const RenderingDeviceDriverD3D12::CommandBufferInfo *)(p_cmd_buffer.id);
-	ID3D12GraphicsCommandList *cmd_list = cmd_info->cmd_list.Get();
+	ID3D12GraphicsCommandList *cmd_list = RenderingDeviceDriverD3D12::command_buffer_d3d12(p_cmd_buffer);
 
 	xess_d3d12_execute_params_t exec_params = {};
 	exec_params.pColorTexture = (ID3D12Resource *)p_userdata->color;
@@ -449,10 +445,10 @@ void XeSSEffect::upscale(const Parameters &p_params) {
 		args->output_height = (uint32_t)p_params.context->target_size.y;
 
 		RD::CallbackResource res[4] = {
-			{ .rid = p_params.color, .usage = RD::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE },
-			{ .rid = p_params.depth, .usage = RD::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE },
-			{ .rid = p_params.velocity, .usage = RD::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE },
-			{ .rid = p_params.output, .usage = RD::CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ_WRITE },
+			{ p_params.color, RD::CALLBACK_RESOURCE_TYPE_TEXTURE, RD::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE },
+			{ p_params.depth, RD::CALLBACK_RESOURCE_TYPE_TEXTURE, RD::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE },
+			{ p_params.velocity, RD::CALLBACK_RESOURCE_TYPE_TEXTURE, RD::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE },
+			{ p_params.output, RD::CALLBACK_RESOURCE_TYPE_TEXTURE, RD::CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ_WRITE },
 		};
 		rd->driver_callback_add((RDD::DriverCallback)XeSSEffect::callback_d3d12, args, VectorView<RD::CallbackResource>(res, 4));
 		return;
@@ -486,10 +482,10 @@ void XeSSEffect::upscale(const Parameters &p_params) {
 		args->output_height = (uint32_t)p_params.context->target_size.y;
 
 		RD::CallbackResource res[4] = {
-			{ .rid = p_params.color, .usage = RD::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE },
-			{ .rid = p_params.depth, .usage = RD::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE },
-			{ .rid = p_params.velocity, .usage = RD::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE },
-			{ .rid = p_params.output, .usage = RD::CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ_WRITE },
+			{ p_params.color, RD::CALLBACK_RESOURCE_TYPE_TEXTURE, RD::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE },
+			{ p_params.depth, RD::CALLBACK_RESOURCE_TYPE_TEXTURE, RD::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE },
+			{ p_params.velocity, RD::CALLBACK_RESOURCE_TYPE_TEXTURE, RD::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE },
+			{ p_params.output, RD::CALLBACK_RESOURCE_TYPE_TEXTURE, RD::CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ_WRITE },
 		};
 		rd->driver_callback_add((RDD::DriverCallback)XeSSEffect::callback_vk, args, VectorView<RD::CallbackResource>(res, 4));
 	}
