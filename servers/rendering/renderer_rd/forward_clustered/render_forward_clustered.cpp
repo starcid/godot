@@ -2536,8 +2536,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->draw_command_begin_label("XeSS");
 			RENDER_TIMESTAMP("XeSS");
 
-			// XeSS expects jitter in the range [-0.5, 0.5] (NDC jitter scale).
-			Vector2 jitter = p_render_data->scene_data->taa_jitter * 0.5f;
+			// XeSS expects jitter in pixel units at the input (internal) resolution, in the range [-0.5, 0.5].
+			// taa_jitter is stored as halton / viewport_size (NDC units), so we multiply back by
+			// internal_size * 0.5 to convert to sub-pixel offsets, matching the FSR2 convention.
+			Vector2 jitter = p_render_data->scene_data->taa_jitter * Vector2(rb->get_internal_size()) * 0.5f;
 
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 				RendererRD::XeSSEffect::Parameters params;
