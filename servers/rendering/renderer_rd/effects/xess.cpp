@@ -71,7 +71,6 @@
 
 typedef xess_result_t (*PFN_xessDestroyContext)(xess_context_handle_t);
 typedef xess_result_t (*PFN_xessGetVersion)(xess_version_t *);
-typedef xess_result_t (*PFN_xessSetVelocityScale)(xess_context_handle_t, float, float);
 
 #ifdef VULKAN_ENABLED
 typedef xess_result_t (*PFN_xessVKCreateContext)(VkInstance, VkPhysicalDevice, VkDevice, xess_context_handle_t *);
@@ -191,7 +190,6 @@ bool XeSSEffect::_load_library() {
 	// Shared symbols present in libxess.dll for all backends.
 	XESS_LOAD_SYMBOL(xessDestroyContext);
 	XESS_LOAD_SYMBOL(xessGetVersion);
-	XESS_LOAD_SYMBOL(xessSetVelocityScale);
 
 #ifdef VULKAN_ENABLED
 	if (!api_d3d12) {
@@ -227,7 +225,6 @@ void XeSSEffect::_unload_library() {
 		library_handle = nullptr;
 		fn_xessDestroyContext = nullptr;
 		fn_xessGetVersion = nullptr;
-		fn_xessSetVelocityScale = nullptr;
 #ifdef VULKAN_ENABLED
 		fn_xessVKCreateContext = nullptr;
 		fn_xessVKInit = nullptr;
@@ -256,7 +253,10 @@ XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_
 	float scale = float(p_internal_size.x) / float(p_target_size.x);
 	xess_quality_settings_t quality = _select_quality_setting(scale);
 	// Both Vulkan and D3D12 renderers use reverse-Z depth.
-	uint32_t init_flags = XESS_INIT_FLAG_INVERTED_DEPTH | XESS_INIT_FLAG_ENABLE_AUTOEXPOSURE;
+	// Godot stores velocity as UV-space displacement (fraction of viewport, range ~[0,1]).
+	// Use XESS_INIT_FLAG_USE_NDC_VELOCITY so XeSS interprets the buffer in NDC space
+	// (UV ≈ NDC/2), which avoids calling xessSetVelocityScale after Init (crashes in XeSS 3 SR).
+	uint32_t init_flags = XESS_INIT_FLAG_INVERTED_DEPTH | XESS_INIT_FLAG_ENABLE_AUTOEXPOSURE | XESS_INIT_FLAG_USE_NDC_VELOCITY;
 
 #ifdef D3D12_ENABLED
 	if (api_d3d12) {
@@ -286,10 +286,6 @@ XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_
 			((PFN_xessDestroyContext)fn_xessDestroyContext)(xess_handle);
 			return nullptr;
 		}
-
-		// Godot stores velocity as UV-space displacement (fraction of viewport size, range [0,1]).
-		// XeSS expects pixel-space velocity by default, so scale by the internal resolution to convert.
-		((PFN_xessSetVelocityScale)fn_xessSetVelocityScale)(xess_handle, float(p_internal_size.x), float(p_internal_size.y));
 
 		XeSSContext *ctx = memnew(XeSSContext);
 		ctx->handle = (xess_context_handle_t_opaque *)xess_handle;
@@ -334,10 +330,6 @@ XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_
 			((PFN_xessDestroyContext)fn_xessDestroyContext)(xess_handle);
 			return nullptr;
 		}
-
-		// Godot stores velocity as UV-space displacement (fraction of viewport size, range [0,1]).
-		// XeSS expects pixel-space velocity by default, so scale by the internal resolution to convert.
-		((PFN_xessSetVelocityScale)fn_xessSetVelocityScale)(xess_handle, float(p_internal_size.x), float(p_internal_size.y));
 
 		XeSSContext *ctx = memnew(XeSSContext);
 		ctx->handle = (xess_context_handle_t_opaque *)xess_handle;

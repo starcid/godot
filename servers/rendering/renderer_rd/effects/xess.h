@@ -158,7 +158,6 @@ private:
 	// Shared function pointers (Vulkan and D3D12 share the same libxess.dll).
 	void *fn_xessDestroyContext = nullptr;
 	void *fn_xessGetVersion = nullptr;
-	void *fn_xessSetVelocityScale = nullptr;
 
 #ifdef VULKAN_ENABLED
 	// Vulkan-specific function pointers.
