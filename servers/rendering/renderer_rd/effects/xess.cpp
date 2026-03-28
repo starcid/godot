@@ -486,8 +486,9 @@ void XeSSEffect::upscale(const Parameters &p_params) {
 		args->output = (void *)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_TEXTURE, p_params.output);
 
 		if (!args->color || !args->depth || !args->velocity || !args->output) {
-			print_error(vformat("XeSS: D3D12 texture resource is null (color=%p depth=%p velocity=%p output=%p); upscale skipped.",
-					args->color, args->depth, args->velocity, args->output));
+			print_error(vformat("XeSS: D3D12 texture resource is null (color=0x%x depth=0x%x velocity=0x%x output=0x%x); upscale skipped.",
+					(uint64_t)(uintptr_t)args->color, (uint64_t)(uintptr_t)args->depth,
+					(uint64_t)(uintptr_t)args->velocity, (uint64_t)(uintptr_t)args->output));
 			d3d12_args_allocator.free(args);
 			return;
 		}
@@ -530,9 +531,9 @@ void XeSSEffect::upscale(const Parameters &p_params) {
 
 		if (args->color_image == VK_NULL_HANDLE || args->depth_image == VK_NULL_HANDLE ||
 				args->velocity_image == VK_NULL_HANDLE || args->output_image == VK_NULL_HANDLE) {
-			print_error(vformat("XeSS: VkImage handle is null (color=%p depth=%p velocity=%p output=%p); upscale skipped.",
-					(void *)(uintptr_t)args->color_image, (void *)(uintptr_t)args->depth_image,
-					(void *)(uintptr_t)args->velocity_image, (void *)(uintptr_t)args->output_image));
+			print_error(vformat("XeSS: VkImage handle is null (color=0x%x depth=0x%x velocity=0x%x output=0x%x); upscale skipped.",
+					(uint64_t)(uintptr_t)args->color_image, (uint64_t)(uintptr_t)args->depth_image,
+					(uint64_t)(uintptr_t)args->velocity_image, (uint64_t)(uintptr_t)args->output_image));
 			vk_args_allocator.free(args);
 			return;
 		}
