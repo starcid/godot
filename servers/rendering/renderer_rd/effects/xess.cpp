@@ -359,7 +359,25 @@ XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_
 #ifdef VULKAN_ENABLED
 
 void XeSSEffect::callback_vk(RDD *p_driver, RDD::CommandBufferID p_cmd_buffer, CallbackArgs *p_userdata) {
+	XeSSEffect *owner = p_userdata->owner;
+	xess_context_handle_t xess_handle = (xess_context_handle_t)(p_userdata->xess_handle);
 	VkCommandBuffer vk_cmd = RenderingDeviceDriverVulkan::command_buffer_vk(p_cmd_buffer);
+
+	if (owner->fn_xessVKExecute == nullptr) {
+		print_error("XeSS: fn_xessVKExecute is null; cannot execute upscaling.");
+		CallbackArgs::free_cb(&p_userdata);
+		return;
+	}
+	if (xess_handle == nullptr) {
+		print_error("XeSS: xess_context_handle is null in VK execute callback; cannot execute upscaling.");
+		CallbackArgs::free_cb(&p_userdata);
+		return;
+	}
+	if (vk_cmd == VK_NULL_HANDLE) {
+		print_error("XeSS: VkCommandBuffer is null in VK execute callback; cannot execute upscaling.");
+		CallbackArgs::free_cb(&p_userdata);
+		return;
+	}
 
 	xess_vk_execute_params_t exec_params = {};
 	exec_params.colorTexture = _make_image_view_info(
@@ -381,9 +399,6 @@ void XeSSEffect::callback_vk(RDD *p_driver, RDD::CommandBufferID p_cmd_buffer, C
 	exec_params.inputWidth = p_userdata->input_width;
 	exec_params.inputHeight = p_userdata->input_height;
 
-	XeSSEffect *owner = p_userdata->owner;
-	xess_context_handle_t xess_handle = (xess_context_handle_t)(p_userdata->xess_handle);
-
 	xess_result_t result = ((PFN_xessVKExecute)owner->fn_xessVKExecute)(xess_handle, vk_cmd, &exec_params);
 	if (result != XESS_RESULT_SUCCESS) {
 		print_error(vformat("XeSS: xessVKExecute failed with code %d.", (int)result));
@@ -400,7 +415,25 @@ void XeSSEffect::callback_vk(RDD *p_driver, RDD::CommandBufferID p_cmd_buffer, C
 #ifdef D3D12_ENABLED
 
 void XeSSEffect::callback_d3d12(RDD *p_driver, RDD::CommandBufferID p_cmd_buffer, CallbackArgsD3D12 *p_userdata) {
+	XeSSEffect *owner = p_userdata->owner;
+	xess_context_handle_t xess_handle = (xess_context_handle_t)(p_userdata->xess_handle);
 	ID3D12GraphicsCommandList *cmd_list = RenderingDeviceDriverD3D12::command_buffer_d3d12(p_cmd_buffer);
+
+	if (owner->fn_xessD3D12Execute == nullptr) {
+		print_error("XeSS: fn_xessD3D12Execute is null; cannot execute upscaling.");
+		CallbackArgsD3D12::free_cb(&p_userdata);
+		return;
+	}
+	if (xess_handle == nullptr) {
+		print_error("XeSS: xess_context_handle is null in D3D12 execute callback; cannot execute upscaling.");
+		CallbackArgsD3D12::free_cb(&p_userdata);
+		return;
+	}
+	if (cmd_list == nullptr) {
+		print_error("XeSS: ID3D12GraphicsCommandList is null in D3D12 execute callback; cannot execute upscaling.");
+		CallbackArgsD3D12::free_cb(&p_userdata);
+		return;
+	}
 
 	xess_d3d12_execute_params_t exec_params = {};
 	exec_params.pColorTexture = (ID3D12Resource *)p_userdata->color;
@@ -415,9 +448,6 @@ void XeSSEffect::callback_d3d12(RDD *p_driver, RDD::CommandBufferID p_cmd_buffer
 	exec_params.inputHeight = p_userdata->input_height;
 	exec_params.pDescriptorHeap = nullptr;
 	exec_params.descriptorHeapOffset = 0;
-
-	XeSSEffect *owner = p_userdata->owner;
-	xess_context_handle_t xess_handle = (xess_context_handle_t)(p_userdata->xess_handle);
 
 	xess_result_t result = ((PFN_xessD3D12Execute)owner->fn_xessD3D12Execute)(xess_handle, cmd_list, &exec_params);
 	if (result != XESS_RESULT_SUCCESS) {
@@ -436,6 +466,11 @@ void XeSSEffect::callback_d3d12(RDD *p_driver, RDD::CommandBufferID p_cmd_buffer
 void XeSSEffect::upscale(const Parameters &p_params) {
 	ERR_FAIL_COND(!is_available());
 	ERR_FAIL_NULL(p_params.context);
+	ERR_FAIL_NULL_MSG(p_params.context->handle, "XeSS: xess_context_handle is null; upscale skipped.");
+	ERR_FAIL_COND_MSG(p_params.color.is_null(), "XeSS: color texture RID is invalid; upscale skipped.");
+	ERR_FAIL_COND_MSG(p_params.depth.is_null(), "XeSS: depth texture RID is invalid; upscale skipped.");
+	ERR_FAIL_COND_MSG(p_params.velocity.is_null(), "XeSS: velocity texture RID is invalid; upscale skipped.");
+	ERR_FAIL_COND_MSG(p_params.output.is_null(), "XeSS: output texture RID is invalid; upscale skipped.");
 
 	RenderingDevice *rd = RenderingDevice::get_singleton();
 	using RDC = RenderingDeviceCommons;
@@ -449,6 +484,14 @@ void XeSSEffect::upscale(const Parameters &p_params) {
 		args->depth = (void *)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_TEXTURE, p_params.depth);
 		args->velocity = (void *)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_TEXTURE, p_params.velocity);
 		args->output = (void *)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_TEXTURE, p_params.output);
+
+		if (!args->color || !args->depth || !args->velocity || !args->output) {
+			print_error(vformat("XeSS: D3D12 texture resource is null (color=%p depth=%p velocity=%p output=%p); upscale skipped.",
+					args->color, args->depth, args->velocity, args->output));
+			d3d12_args_allocator.free(args);
+			return;
+		}
+
 		args->jitter_x = p_params.jitter.x;
 		args->jitter_y = p_params.jitter.y;
 		args->reset = p_params.reset_accumulation;
@@ -484,6 +527,15 @@ void XeSSEffect::upscale(const Parameters &p_params) {
 		fetch_vk(p_params.depth, args->depth_image, args->depth_view, args->depth_format);
 		fetch_vk(p_params.velocity, args->velocity_image, args->velocity_view, args->velocity_format);
 		fetch_vk(p_params.output, args->output_image, args->output_view, args->output_format);
+
+		if (args->color_image == VK_NULL_HANDLE || args->depth_image == VK_NULL_HANDLE ||
+				args->velocity_image == VK_NULL_HANDLE || args->output_image == VK_NULL_HANDLE) {
+			print_error(vformat("XeSS: VkImage handle is null (color=%p depth=%p velocity=%p output=%p); upscale skipped.",
+					(void *)(uintptr_t)args->color_image, (void *)(uintptr_t)args->depth_image,
+					(void *)(uintptr_t)args->velocity_image, (void *)(uintptr_t)args->output_image));
+			vk_args_allocator.free(args);
+			return;
+		}
 
 		args->jitter_x = p_params.jitter.x;
 		args->jitter_y = p_params.jitter.y;
