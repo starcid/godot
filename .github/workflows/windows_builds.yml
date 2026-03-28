@@ -121,6 +121,7 @@ jobs:
         if: matrix.compiler == 'msvc'
         run: |
           Remove-Item bin/* -Include *.exp,*.lib,*.pdb -Force
+          Copy-Item thirdparty/intel-xess/bin/libxess.dll bin/
 
       - name: Upload artifact
         if: matrix.compiler == 'msvc'
