@@ -289,6 +289,7 @@ XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_
 
 		// Godot stores velocity as UV-space displacement (fraction of viewport size, range [0,1]).
 		// XeSS expects pixel-space velocity by default, so scale by the internal resolution to convert.
+		ERR_FAIL_NULL_V_MSG(fn_xessSetVelocityScale, nullptr, "XeSS: fn_xessSetVelocityScale is null; symbol was not loaded correctly.");
 		((PFN_xessSetVelocityScale)fn_xessSetVelocityScale)(xess_handle, float(p_internal_size.x), float(p_internal_size.y));
 
 		XeSSContext *ctx = memnew(XeSSContext);
@@ -337,6 +338,7 @@ XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_
 
 		// Godot stores velocity as UV-space displacement (fraction of viewport size, range [0,1]).
 		// XeSS expects pixel-space velocity by default, so scale by the internal resolution to convert.
+		ERR_FAIL_NULL_V_MSG(fn_xessSetVelocityScale, nullptr, "XeSS: fn_xessSetVelocityScale is null; symbol was not loaded correctly.");
 		((PFN_xessSetVelocityScale)fn_xessSetVelocityScale)(xess_handle, float(p_internal_size.x), float(p_internal_size.y));
 
 		XeSSContext *ctx = memnew(XeSSContext);
