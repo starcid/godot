@@ -2222,8 +2222,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RD::get_singleton()->draw_command_end_label();
 
 		if (using_motion_pass) {
-			if (scale_type == SCALE_MFX || scale_type == SCALE_XESS) {
-				// MetalFX Temporal and XeSS do not understand the (-1, -1) sentinel that Godot uses
+			if (scale_type == SCALE_MFX) {
+				// MetalFX Temporal does not understand the (-1, -1) sentinel that Godot uses
 				// to signal "derive from depth". Pre-fill the velocity buffer with depth-derived
 				// motion vectors so that static pixels correctly contribute 0-velocity to the
 				// temporal accumulation. The subsequent motion pass will overwrite moving objects
@@ -2231,6 +2231,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				motion_vectors_store->process(rb,
 						p_render_data->scene_data->cam_projection, p_render_data->scene_data->cam_transform,
 						p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform);
+			} else if (scale_type == SCALE_XESS) {
+				// XeSS does not understand the (-1, -1) sentinel. Clear to zero — zero UV-space
+				// velocity is correct for static pixels; xessSetVelocityScale converts it to
+				// pixel-space. The subsequent motion pass overwrites moving objects.
+				Vector<Color> zero_velocity;
+				zero_velocity.push_back(Color(0, 0, 0, 0));
+				RD::get_singleton()->draw_list_begin(rb_data->get_velocity_only_fb(), RD::DRAW_CLEAR_ALL, zero_velocity);
+				RD::get_singleton()->draw_list_end();
 			} else {
 				Vector<Color> motion_vector_clear_colors;
 				motion_vector_clear_colors.push_back(Color(-1, -1, 0, 0));
