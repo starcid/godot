@@ -2222,7 +2222,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RD::get_singleton()->draw_command_end_label();
 
 		if (using_motion_pass) {
-			if (scale_type == SCALE_MFX) {
+			if (scale_type == SCALE_MFX || scale_type == SCALE_XESS) {
+				// MetalFX Temporal and XeSS do not understand the (-1, -1) sentinel that Godot uses
+				// to signal "derive from depth". Pre-fill the velocity buffer with depth-derived
+				// motion vectors so that static pixels correctly contribute 0-velocity to the
+				// temporal accumulation. The subsequent motion pass will overwrite moving objects
+				// with their vertex-based velocity.
 				motion_vectors_store->process(rb,
 						p_render_data->scene_data->cam_projection, p_render_data->scene_data->cam_transform,
 						p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform);
