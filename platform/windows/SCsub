@@ -51,13 +51,6 @@ if env["arch"] == "x86_64" and env["library_type"] == "executable":
     if env.msvc:
         if "/d2archSSE42" in env_cpp_check["CCFLAGS"]:
             env_cpp_check["CCFLAGS"].remove("/d2archSSE42")
-        # Replace /Zi with /Z7 to embed debug info directly in the .obj instead of
-        # a shared vc140.pdb, avoiding linker warning LNK4099 when the .obj is
-        # restored from the build cache (where the PDB file is not preserved).
-        for flag in ["/Zi", "/ZI"]:
-            if flag in env_cpp_check["CCFLAGS"]:
-                env_cpp_check["CCFLAGS"].remove(flag)
-        env_cpp_check.AppendUnique(CCFLAGS=["/Z7"])
         env.Append(LINKFLAGS=["/ENTRY:ShimMainCRTStartup"])
     else:
         if "-msse4.2" in env_cpp_check["CCFLAGS"]:
