@@ -269,7 +269,7 @@ XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_
 			ID3D12CommandQueue *d3d12_queue = (ID3D12CommandQueue *)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_COMMAND_QUEUE);
 			if (d3d12_queue) {
 				Microsoft::WRL::ComPtr<ID3D12Fence> fence;
-				if (SUCCEEDED(d3d12_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)))) {
+				if (SUCCEEDED(d3d12_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.GetAddressOf())))) {
 					HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
 					if (event) {
 						d3d12_queue->Signal(fence.Get(), 1);
