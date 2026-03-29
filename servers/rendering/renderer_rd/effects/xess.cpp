@@ -63,6 +63,14 @@
 
 #ifdef D3D12_ENABLED
 #include <thirdparty/intel-xess/inc/xess/xess_d3d12.h>
+
+#if !defined(_MSC_VER)
+// With MinGW, GUID symbols are only declared extern in D3D12 headers.
+// Including dxguids.h provides the actual definitions needed by the linker.
+#include <thirdparty/directx_headers/include/dxguids/dxguids.h>
+
+#include <guiddef.h>
+#endif
 #endif
 
 // ============================================================================
