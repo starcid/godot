@@ -5343,7 +5343,16 @@ RDD::PipelineID RenderingDeviceDriverD3D12::render_pipeline_create(
 	if (device_2) {
 		D3D12_PIPELINE_STATE_STREAM_DESC pssd = {};
 		pssd.pPipelineStateSubobjectStream = &pipeline_desc;
-		pssd.SizeInBytes = sizeof(pipeline_desc);
+		// For non-multiview pipelines, trim the stream size to exclude the ViewInstancingDesc
+		// subobject. Some third-party hooks (notably the XeSS SDK) intercept
+		// CreatePipelineState and crash when they encounter the
+		// D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_VIEW_INSTANCING subobject type, which is
+		// always present in CD3DX12_PIPELINE_STATE_STREAM1 even when zero-initialised.
+		// Truncating SizeInBytes makes the D3D12 runtime stop parsing the stream before
+		// it reaches that subobject, keeping the same single-view pipeline behaviour while
+		// avoiding the crash.
+		const SIZE_T size_before_view_instancing = reinterpret_cast<const char *>(&pipeline_desc.ViewInstancingDesc) - reinterpret_cast<const char *>(&pipeline_desc);
+		pssd.SizeInBytes = (pass_info->view_count > 1) ? sizeof(pipeline_desc) : size_before_view_instancing;
 		res = device_2->CreatePipelineState(&pssd, IID_PPV_ARGS(pso.GetAddressOf()));
 	} else {
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = pipeline_desc.GraphicsDescV0();
