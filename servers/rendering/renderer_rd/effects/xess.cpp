@@ -263,6 +263,24 @@ XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_
 		ID3D12Device *d3d12_device = (ID3D12Device *)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_LOGICAL_DEVICE);
 		ERR_FAIL_COND_V_MSG(!d3d12_device, nullptr, "XeSS: Failed to get ID3D12Device.");
 
+		// xessD3D12Init creates internal GPU resources and requires the command queue to be idle.
+		// Signal a fence on the main queue and wait for completion before proceeding.
+		{
+			ID3D12CommandQueue *d3d12_queue = (ID3D12CommandQueue *)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_COMMAND_QUEUE);
+			if (d3d12_queue) {
+				Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+				if (SUCCEEDED(d3d12_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)))) {
+					HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+					if (event) {
+						d3d12_queue->Signal(fence.Get(), 1);
+						fence->SetEventOnCompletion(1, event);
+						WaitForSingleObject(event, INFINITE);
+						CloseHandle(event);
+					}
+				}
+			}
+		}
+
 		xess_context_handle_t xess_handle = nullptr;
 		xess_result_t result = ((PFN_xessD3D12CreateContext)fn_xessD3D12CreateContext)(d3d12_device, &xess_handle);
 		if (result != XESS_RESULT_SUCCESS) {
@@ -310,6 +328,9 @@ XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_
 		ERR_FAIL_COND_V_MSG(vk_instance == VK_NULL_HANDLE, nullptr, "XeSS: Failed to get VkInstance.");
 		ERR_FAIL_COND_V_MSG(vk_physical_device == VK_NULL_HANDLE, nullptr, "XeSS: Failed to get VkPhysicalDevice.");
 		ERR_FAIL_COND_V_MSG(vk_device == VK_NULL_HANDLE, nullptr, "XeSS: Failed to get VkDevice.");
+
+		// xessVKInit creates internal GPU resources and requires all pending GPU work to be done.
+		vkDeviceWaitIdle(vk_device);
 
 		xess_context_handle_t xess_handle = nullptr;
 		xess_result_t result = ((PFN_xessVKCreateContext)fn_xessVKCreateContext)(

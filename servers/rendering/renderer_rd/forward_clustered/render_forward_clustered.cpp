@@ -2536,6 +2536,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 #endif
 		} else if (scale_type == SCALE_XESS) {
 #if defined(WINDOWS_ENABLED)
+			// On first use: wait for all background engine pipeline compilations to finish,
+			// then wait for the GPU to be idle before initialising XeSS. Both xessD3D12Init
+			// and xessVKInit create internal GPU resources and are not safe to call while
+			// render_pipeline_create is running concurrently on worker threads, or while the
+			// GPU command queue has outstanding work.
+			if (rb_data->get_xess_context() == nullptr) {
+				scene_shader.wait_for_all_pipeline_compilations();
+			}
 			rb_data->ensure_xess(xess_effect);
 
 			RD::get_singleton()->draw_command_begin_label("XeSS");

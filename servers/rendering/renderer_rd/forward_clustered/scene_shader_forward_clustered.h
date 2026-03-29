@@ -382,6 +382,8 @@ public:
 	bool is_multiview_shader_group_enabled() const;
 	bool is_advanced_shader_group_enabled(bool p_multiview) const;
 	uint32_t get_pipeline_compilations(RSE::PipelineSource p_source);
+	// Wait for all in-flight background pipeline compilation tasks across all shader data instances.
+	void wait_for_all_pipeline_compilations();
 };
 
 } // namespace RendererSceneRenderImplementation
