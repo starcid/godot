@@ -2743,6 +2743,9 @@
 		<constant name="SUPPORTS_HDR_OUTPUT" value="13" enum="Features">
 			Support for high dynamic range (HDR) output.
 		</constant>
+		<constant name="SUPPORTS_XESS" value="14" enum="Features">
+			Support for Intel XeSS Super Resolution upscaling.
+		</constant>
 		<constant name="LIMIT_MAX_BOUND_UNIFORM_SETS" value="0" enum="Limit">
 			Maximum number of uniform sets that can be bound at a given time.
 		</constant>

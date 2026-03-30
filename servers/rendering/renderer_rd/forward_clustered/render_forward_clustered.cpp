@@ -108,6 +108,35 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::ensure_mfx_tempor
 }
 #endif
 
+#if defined(WINDOWS_ENABLED)
+void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_xess(RendererRD::XeSSEffect *p_effect) {
+	Size2i internal_size = render_buffers->get_internal_size();
+	Size2i target_size = render_buffers->get_target_size();
+
+	if (xess_context == nullptr) {
+		xess_context = p_effect->create_context();
+	}
+
+	if (xess_context) {
+		float scale = float(internal_size.x) / float(target_size.x);
+		int wanted_quality = (int)p_effect->quality_for_ratio(xess_context, target_size, scale);
+		if (wanted_quality != xess_last_quality || target_size != xess_last_target_size) {
+			Size2i recommended = p_effect->init_by_ratio(xess_context, scale, target_size);
+			if (recommended == Size2i()) {
+				// init failed — destroy the unusable context
+				memdelete(xess_context);
+				xess_context = nullptr;
+				xess_last_target_size = Size2i();
+				xess_last_quality = -1;
+			} else {
+				xess_last_quality = wanted_quality;
+				xess_last_target_size = target_size;
+			}
+		}
+	}
+}
+#endif
+
 void RenderForwardClustered::RenderBufferDataForwardClustered::free_data() {
 	// JIC, should already have been cleared
 	if (render_buffers) {
@@ -132,6 +161,13 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::free_data() {
 	if (mfx_temporal_context) {
 		memdelete(mfx_temporal_context);
 		mfx_temporal_context = nullptr;
+	}
+#endif
+
+#if defined(WINDOWS_ENABLED)
+	if (xess_context) {
+		memdelete(xess_context);
+		xess_context = nullptr;
 	}
 #endif
 
@@ -1760,6 +1796,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		SCALE_NONE,
 		SCALE_FSR2,
 		SCALE_MFX,
+		SCALE_XESS,
 	} scale_type = SCALE_NONE;
 
 	switch (rb->get_scaling_3d_mode()) {
@@ -1771,6 +1808,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			scale_type = SCALE_MFX;
 #else
 			scale_type = SCALE_NONE;
+#endif
+			break;
+		case RSE::VIEWPORT_SCALING_3D_MODE_XESS:
+#if defined(WINDOWS_ENABLED)
+			if (xess_effect && xess_effect->is_available()) {
+				scale_type = SCALE_XESS;
+			}
 #endif
 			break;
 		default:
@@ -2199,7 +2243,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RD::get_singleton()->draw_command_end_label();
 
 		if (using_motion_pass) {
-			if (scale_type == SCALE_MFX) {
+			if (scale_type == SCALE_MFX || scale_type == SCALE_XESS) {
+				// MetalFX Temporal and XeSS do not understand the (-1, -1) sentinel that Godot uses
+				// to signal "derive from depth". Pre-fill the velocity buffer with depth-derived
+				// motion vectors so that static pixels (including those affected by camera movement)
+				// receive correct reprojected velocity. The subsequent motion pass will overwrite
+				// moving objects with their vertex-based velocity.
 				motion_vectors_store->process(rb,
 						p_render_data->scene_data->cam_projection, p_render_data->scene_data->cam_transform,
 						p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform);
@@ -2502,6 +2551,43 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				params.reset = reset;
 
 				mfx_temporal_effect->process(rb_data->get_mfx_temporal_context(), params);
+			}
+
+			RD::get_singleton()->draw_command_end_label();
+#endif
+		} else if (scale_type == SCALE_XESS) {
+#if defined(WINDOWS_ENABLED)
+			// On first use: wait for all background engine pipeline compilations to finish,
+			// then wait for the GPU to be idle before initializing XeSS. Both xessD3D12Init
+			// and xessVKInit create internal GPU resources and are not safe to call while
+			// render_pipeline_create is running concurrently on worker threads, or while the
+			// GPU command queue has outstanding work.
+			if (rb_data->get_xess_context() == nullptr) {
+				scene_shader.wait_for_all_pipeline_compilations();
+			}
+			rb_data->ensure_xess(xess_effect);
+
+			RD::get_singleton()->draw_command_begin_label("XeSS");
+			RENDER_TIMESTAMP("XeSS");
+
+			// XeSS expects jitter in pixel units at the input (internal) resolution, in the range [-0.5, 0.5].
+			// taa_jitter is stored as halton / viewport_size (NDC units), so we multiply back by
+			// internal_size * 0.5 to convert to sub-pixel offsets, matching the FSR2 convention.
+			Vector2 jitter = p_render_data->scene_data->taa_jitter * Vector2(rb->get_internal_size()) * 0.5f;
+
+			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
+				RendererRD::XeSSEffect::Parameters params;
+				params.context = rb_data->get_xess_context();
+				params.internal_size = rb->get_internal_size();
+				params.color = rb->get_internal_texture(v);
+				params.depth = rb->get_depth_texture(v);
+				params.velocity = rb->get_velocity_buffer(false, v);
+				params.output = rb->get_upscaled_texture(v);
+				params.jitter = jitter;
+				params.delta_time = float(time_step);
+				params.reset_accumulation = false; // FIXME: The engine does not provide a way to reset the accumulation.
+
+				xess_effect->upscale(params);
 			}
 
 			RD::get_singleton()->draw_command_end_label();
@@ -5138,6 +5224,14 @@ RenderForwardClustered::RenderForwardClustered() {
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
 	mfx_temporal_effect = memnew(RendererRD::MFXTemporalEffect);
 #endif
+#if defined(WINDOWS_ENABLED)
+	xess_effect = memnew(RendererRD::XeSSEffect);
+	if (!xess_effect->is_available()) {
+		// Library not present; keep the object so that fallback detection works
+		// but the feature simply won't be used.
+		print_verbose("XeSS: libxess not found. XeSS upscaling will be unavailable.");
+	}
+#endif
 }
 
 RenderForwardClustered::~RenderForwardClustered() {
@@ -5165,6 +5259,13 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (motion_vectors_store) {
 		memdelete(motion_vectors_store);
 		motion_vectors_store = nullptr;
+	}
+#endif
+
+#if defined(WINDOWS_ENABLED)
+	if (xess_effect) {
+		memdelete(xess_effect);
+		xess_effect = nullptr;
 	}
 #endif
 

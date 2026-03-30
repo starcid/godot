@@ -46,6 +46,10 @@
 #include "servers/rendering/renderer_rd/effects/metal_fx.h"
 #endif
 
+#if defined(WINDOWS_ENABLED)
+#include "servers/rendering/renderer_rd/effects/xess.h"
+#endif
+
 #define RB_SCOPE_FORWARD_CLUSTERED SNAME("forward_clustered")
 
 #define RB_TEX_SPECULAR SNAME("specular")
@@ -99,6 +103,13 @@ public:
 #ifdef METAL_MFXTEMPORAL_ENABLED
 		RendererRD::MFXTemporalContext *mfx_temporal_context = nullptr;
 #endif
+#if defined(WINDOWS_ENABLED)
+		RendererRD::XeSSContext *xess_context = nullptr;
+		// Cached values used by ensure_xess to detect when xessInit must be re-called.
+		// A re-init is required when the target output resolution or the quality preset changes.
+		Size2i xess_last_target_size;
+		int xess_last_quality = -1; // -1 means "not yet initialized"
+#endif
 
 	public:
 		ClusterBuilderRD *cluster_builder = nullptr;
@@ -148,6 +159,11 @@ public:
 #ifdef METAL_MFXTEMPORAL_ENABLED
 		bool ensure_mfx_temporal(RendererRD::MFXTemporalEffect *p_effect);
 		RendererRD::MFXTemporalContext *get_mfx_temporal_context() const { return mfx_temporal_context; }
+#endif
+
+#if defined(WINDOWS_ENABLED)
+		void ensure_xess(RendererRD::XeSSEffect *p_effect);
+		RendererRD::XeSSContext *get_xess_context() const { return xess_context; }
 #endif
 
 		RID get_color_only_fb();
@@ -744,6 +760,11 @@ private:
 #ifdef METAL_MFXTEMPORAL_ENABLED
 	RendererRD::MFXTemporalEffect *mfx_temporal_effect = nullptr;
 #endif
+
+#if defined(WINDOWS_ENABLED)
+	RendererRD::XeSSEffect *xess_effect = nullptr;
+#endif
+
 	RendererRD::MotionVectorsStore *motion_vectors_store = nullptr;
 
 	/* Cluster builder */

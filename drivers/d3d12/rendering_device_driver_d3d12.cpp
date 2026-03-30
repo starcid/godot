@@ -5343,7 +5343,16 @@ RDD::PipelineID RenderingDeviceDriverD3D12::render_pipeline_create(
 	if (device_2) {
 		D3D12_PIPELINE_STATE_STREAM_DESC pssd = {};
 		pssd.pPipelineStateSubobjectStream = &pipeline_desc;
-		pssd.SizeInBytes = sizeof(pipeline_desc);
+		// For non-multiview pipelines, trim the stream size to exclude the ViewInstancingDesc
+		// subobject. Some third-party hooks (notably the XeSS SDK) intercept
+		// CreatePipelineState and crash when they encounter the
+		// D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_VIEW_INSTANCING subobject type, which is
+		// always present in CD3DX12_PIPELINE_STATE_STREAM1 even when zero-initialised.
+		// Truncating SizeInBytes makes the D3D12 runtime stop parsing the stream before
+		// it reaches that subobject, keeping the same single-view pipeline behavior while
+		// avoiding the crash.
+		const SIZE_T size_before_view_instancing = reinterpret_cast<const char *>(&pipeline_desc.ViewInstancingDesc) - reinterpret_cast<const char *>(&pipeline_desc);
+		pssd.SizeInBytes = (pass_info->view_count > 1) ? sizeof(pipeline_desc) : size_before_view_instancing;
 		res = device_2->CreatePipelineState(&pssd, IID_PPV_ARGS(pso.GetAddressOf()));
 	} else {
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = pipeline_desc.GraphicsDescV0();
@@ -5869,6 +5878,39 @@ bool RenderingDeviceDriverD3D12::has_feature(Features p_feature) {
 			return false;
 		case SUPPORTS_HDR_OUTPUT:
 			return true;
+		case SUPPORTS_XESS: {
+			// XeSS is Windows-only and the D3D12 backend is also Windows-only.
+			// Beyond checking that the DLL exists, we also attempt to create (and immediately
+			// destroy) a real XeSS context to confirm that the hardware and driver actually
+			// support XeSS on this system.
+			static int xess_available = -1; // -1 = unchecked, 0 = no, 1 = yes
+			if (xess_available < 0) {
+				xess_available = 0;
+				void *lib = nullptr;
+				if (OS::get_singleton()->open_dynamic_library("libxess.dll", lib) == OK) {
+					typedef int (*PFN_xessD3D12CreateContext_)(ID3D12Device *, void **);
+					typedef int (*PFN_xessDestroyContext_)(void *);
+					void *fn_create = nullptr;
+					void *fn_destroy = nullptr;
+					OS::get_singleton()->get_dynamic_library_symbol_handle(lib, "xessD3D12CreateContext", fn_create, true);
+					OS::get_singleton()->get_dynamic_library_symbol_handle(lib, "xessDestroyContext", fn_destroy, true);
+					if (fn_create && fn_destroy) {
+						void *test_handle = nullptr;
+						int result = ((PFN_xessD3D12CreateContext_)fn_create)(device.Get(), &test_handle);
+						if (result == 0 && test_handle) { // 0 == XESS_RESULT_SUCCESS
+							((PFN_xessDestroyContext_)fn_destroy)(test_handle);
+							xess_available = 1;
+						} else {
+							print_verbose(vformat("XeSS: xessD3D12CreateContext probe failed with code %d; XeSS will not be available.", result));
+						}
+					} else {
+						print_verbose("XeSS: Failed to resolve xessD3D12CreateContext or xessDestroyContext from libxess.dll; XeSS will not be available.");
+					}
+					OS::get_singleton()->close_dynamic_library(lib);
+				}
+			}
+			return xess_available == 1;
+		}
 		default:
 			return false;
 	}

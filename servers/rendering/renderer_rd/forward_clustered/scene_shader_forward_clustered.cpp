@@ -1038,3 +1038,14 @@ uint32_t SceneShaderForwardClustered::get_pipeline_compilations(RSE::PipelineSou
 	MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
 	return pipeline_compilations[p_source];
 }
+
+void SceneShaderForwardClustered::wait_for_all_pipeline_compilations() {
+	// Iterate every registered ShaderData and drain its background compilation queue.
+	// The pipeline_hash_map lock is internal, so we only hold singleton_mutex long
+	// enough to snapshot the list pointer—then wait outside the lock so the worker
+	// threads can still call add_compiled_pipeline while we block.
+	MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
+	for (SelfList<ShaderData> *E = shader_list.first(); E; E = E->next()) {
+		E->self()->pipeline_hash_map.wait_for_all_pipelines();
+	}
+}

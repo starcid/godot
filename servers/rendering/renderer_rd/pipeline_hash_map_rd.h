@@ -100,6 +100,11 @@ private:
 	}
 
 public:
+	// Wait for all in-flight background pipeline compilation tasks to finish.
+	void wait_for_all_pipelines() {
+		_wait_for_all_pipelines();
+	}
+
 	void add_compiled_pipeline(uint32_t p_hash, RID p_pipeline) {
 		compiled_queue_mutex.lock();
 		compiled_queue.push_back({ p_hash, p_pipeline });

@@ -820,7 +820,12 @@ if env["limit_transitive_includes"]:
 env.AppendUnique(CCFLAGS=["$OPTIMIZELEVEL"])
 if env.msvc:
     if env["debug_symbols"]:
-        env.AppendUnique(CCFLAGS=["/Zi", "/FS"])
+        # Use /Z7 instead of /Zi to embed debug info directly in each .obj file
+        # rather than a shared vc140.pdb. This avoids linker warning LNK4099
+        # when .obj files are restored from the SCons build cache (where the
+        # compiler PDB is not preserved), which would otherwise be treated as
+        # an error under dev_mode (treat warnings as errors).
+        env.AppendUnique(CCFLAGS=["/Z7"])
         env.AppendUnique(LINKFLAGS=["/DEBUG:FULL"])
     else:
         env.AppendUnique(LINKFLAGS=["/DEBUG:NONE"])

@@ -29,6 +29,7 @@ jobs:
               windows_subsystem=console
               vsproj=yes
               vsproj_gen_only=no
+              debug_symbols=yes
             bin: ./bin/godot.windows.editor.x86_64.exe
             compiler: msvc
 
@@ -117,10 +118,19 @@ jobs:
           cache-name: ${{ matrix.cache-name }}
         continue-on-error: true
 
+      - name: Upload debug symbols
+        if: matrix.cache-name == 'windows-editor'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.cache-name }}-symbols
+          path: bin/*.pdb
+          retention-days: 30
+
       - name: Prepare artifact
         if: matrix.compiler == 'msvc'
         run: |
           Remove-Item bin/* -Include *.exp,*.lib,*.pdb -Force
+          Copy-Item thirdparty/intel-xess/bin/libxess.dll bin/
 
       - name: Upload artifact
         if: matrix.compiler == 'msvc'

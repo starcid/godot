@@ -7342,6 +7342,44 @@ bool RenderingDeviceDriverVulkan::has_feature(Features p_feature) {
 			return acceleration_structure_capabilities.acceleration_structure_support && ray_query_support;
 		case SUPPORTS_RAYTRACING_PIPELINE:
 			return acceleration_structure_capabilities.acceleration_structure_support && raytracing_capabilities.raytracing_pipeline_support;
+		case SUPPORTS_XESS: {
+			// XeSS is Windows-only. libxess.dll supports both Vulkan and D3D12 backends.
+			// Beyond checking that the DLL exists, we also attempt to create (and immediately
+			// destroy) a real XeSS context to confirm that the hardware and driver actually
+			// support XeSS on this system.
+#if defined(WINDOWS_ENABLED)
+			static int xess_available = -1; // -1 = unchecked, 0 = no, 1 = yes
+			if (xess_available < 0) {
+				xess_available = 0;
+				void *lib = nullptr;
+				if (OS::get_singleton()->open_dynamic_library("libxess.dll", lib) == OK) {
+					typedef int (*PFN_xessVKCreateContext_)(VkInstance, VkPhysicalDevice, VkDevice, void **);
+					typedef int (*PFN_xessDestroyContext_)(void *);
+					void *fn_create = nullptr;
+					void *fn_destroy = nullptr;
+					OS::get_singleton()->get_dynamic_library_symbol_handle(lib, "xessVKCreateContext", fn_create, true);
+					OS::get_singleton()->get_dynamic_library_symbol_handle(lib, "xessDestroyContext", fn_destroy, true);
+					if (fn_create && fn_destroy) {
+						void *test_handle = nullptr;
+						int result = ((PFN_xessVKCreateContext_)fn_create)(
+								context_driver->instance_get(), physical_device, vk_device, &test_handle);
+						if (result == 0 && test_handle) { // 0 == XESS_RESULT_SUCCESS
+							((PFN_xessDestroyContext_)fn_destroy)(test_handle);
+							xess_available = 1;
+						} else {
+							print_verbose(vformat("XeSS: xessVKCreateContext probe failed with code %d; XeSS will not be available.", result));
+						}
+					} else {
+						print_verbose("XeSS: Failed to resolve xessVKCreateContext or xessDestroyContext from libxess.dll; XeSS will not be available.");
+					}
+					OS::get_singleton()->close_dynamic_library(lib);
+				}
+			}
+			return xess_available == 1;
+#else
+			return false;
+#endif
+		}
 		case SUPPORTS_HDR_OUTPUT:
 #if defined(WINDOWS_ENABLED)
 			// When using a Vulkan swapchain on Windows, some configurations
