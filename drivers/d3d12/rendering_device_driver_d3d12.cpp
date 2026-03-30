@@ -5880,11 +5880,32 @@ bool RenderingDeviceDriverD3D12::has_feature(Features p_feature) {
 			return true;
 		case SUPPORTS_XESS: {
 			// XeSS is Windows-only and the D3D12 backend is also Windows-only.
+			// Beyond checking that the DLL exists, we also attempt to create (and immediately
+			// destroy) a real XeSS context to confirm that the hardware and driver actually
+			// support XeSS on this system.
 			static int xess_available = -1; // -1 = unchecked, 0 = no, 1 = yes
 			if (xess_available < 0) {
+				xess_available = 0;
 				void *lib = nullptr;
-				xess_available = (OS::get_singleton()->open_dynamic_library("libxess.dll", lib) == OK) ? 1 : 0;
-				if (lib) {
+				if (OS::get_singleton()->open_dynamic_library("libxess.dll", lib) == OK) {
+					typedef int (*PFN_xessD3D12CreateContext_)(ID3D12Device *, void **);
+					typedef int (*PFN_xessDestroyContext_)(void *);
+					void *fn_create = nullptr;
+					void *fn_destroy = nullptr;
+					OS::get_singleton()->get_dynamic_library_symbol_handle(lib, "xessD3D12CreateContext", fn_create, true);
+					OS::get_singleton()->get_dynamic_library_symbol_handle(lib, "xessDestroyContext", fn_destroy, true);
+					if (fn_create && fn_destroy) {
+						void *test_handle = nullptr;
+						int result = ((PFN_xessD3D12CreateContext_)fn_create)(device.Get(), &test_handle);
+						if (result == 0 && test_handle) { // 0 == XESS_RESULT_SUCCESS
+							((PFN_xessDestroyContext_)fn_destroy)(test_handle);
+							xess_available = 1;
+						} else {
+							print_verbose(vformat("XeSS: xessD3D12CreateContext probe failed with code %d; XeSS will not be available.", result));
+						}
+					} else {
+						print_verbose("XeSS: Failed to resolve xessD3D12CreateContext or xessDestroyContext from libxess.dll; XeSS will not be available.");
+					}
 					OS::get_singleton()->close_dynamic_library(lib);
 				}
 			}
