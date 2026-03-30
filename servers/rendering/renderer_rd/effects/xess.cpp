@@ -328,7 +328,7 @@ XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_
 #endif // D3D12_ENABLED
 
 #ifdef VULKAN_ENABLED
-	{
+	if (!api_d3d12) {
 		VkInstance vk_instance = (VkInstance)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_VULKAN_INSTANCE);
 		VkPhysicalDevice vk_physical_device = (VkPhysicalDevice)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_VULKAN_PHYSICAL_DEVICE);
 		VkDevice vk_device = (VkDevice)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_VULKAN_DEVICE);
@@ -379,7 +379,7 @@ XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_
 	}
 #endif // VULKAN_ENABLED
 
-	return nullptr;
+	ERR_FAIL_V_MSG(nullptr, "XeSS: create_context called but no matching runtime API backend (neither D3D12 nor Vulkan is active).");
 }
 
 // ============================================================================
@@ -542,7 +542,7 @@ void XeSSEffect::upscale(const Parameters &p_params) {
 #endif // D3D12_ENABLED
 
 #ifdef VULKAN_ENABLED
-	{
+	if (!api_d3d12) {
 		auto fetch_vk = [&](RID p_rid, VkImage &r_image, VkImageView &r_view, VkFormat &r_format) {
 			r_image = (VkImage)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_VULKAN_IMAGE, p_rid);
 			r_view = (VkImageView)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_VULKAN_IMAGE_VIEW, p_rid);
@@ -583,8 +583,11 @@ void XeSSEffect::upscale(const Parameters &p_params) {
 			{ p_params.output, RD::CALLBACK_RESOURCE_TYPE_TEXTURE, RD::CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ_WRITE },
 		};
 		rd->driver_callback_add((RDD::DriverCallback)XeSSEffect::callback_vk, args, VectorView<RD::CallbackResource>(res, 4));
+		return;
 	}
 #endif // VULKAN_ENABLED
+
+	ERR_FAIL_MSG("XeSS: upscale called but no matching runtime API backend (neither D3D12 nor Vulkan is active).");
 }
 
 #endif // WINDOWS_ENABLED
