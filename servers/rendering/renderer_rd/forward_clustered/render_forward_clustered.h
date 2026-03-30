@@ -105,6 +105,9 @@ public:
 #endif
 #if defined(WINDOWS_ENABLED)
 		RendererRD::XeSSContext *xess_context = nullptr;
+		// Cached values used by ensure_xess to detect when xessInit must be re-called.
+		Size2i xess_last_target_size;
+		Size2i xess_last_internal_size;
 #endif
 
 	public:

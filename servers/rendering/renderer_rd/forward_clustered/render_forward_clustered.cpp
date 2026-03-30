@@ -110,18 +110,26 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::ensure_mfx_tempor
 
 #if defined(WINDOWS_ENABLED)
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_xess(RendererRD::XeSSEffect *p_effect) {
+	Size2i internal_size = render_buffers->get_internal_size();
+	Size2i target_size = render_buffers->get_target_size();
+
 	if (xess_context == nullptr) {
 		xess_context = p_effect->create_context();
-		if (xess_context) {
-			Size2i internal_size = render_buffers->get_internal_size();
-			Size2i target_size = render_buffers->get_target_size();
-			float scale = float(internal_size.x) / float(target_size.x);
-			Size2i recommended = p_effect->init_by_ratio(xess_context, scale, target_size);
-			if (recommended == Size2i()) {
-				// init failed — destroy the unusable context
-				memdelete(xess_context);
-				xess_context = nullptr;
-			}
+	}
+
+	if (xess_context &&
+			(internal_size != xess_last_internal_size || target_size != xess_last_target_size)) {
+		float scale = float(internal_size.x) / float(target_size.x);
+		Size2i recommended = p_effect->init_by_ratio(xess_context, scale, target_size);
+		if (recommended == Size2i()) {
+			// init failed — destroy the unusable context
+			memdelete(xess_context);
+			xess_context = nullptr;
+			xess_last_target_size = Size2i();
+			xess_last_internal_size = Size2i();
+		} else {
+			xess_last_internal_size = internal_size;
+			xess_last_target_size = target_size;
 		}
 	}
 }
