@@ -97,6 +97,10 @@ public:
 	XeSSContext *create_context();
 
 	// Initialise (or re-initialise) a context by specifying the render-to-output
+	// Returns the XeSS quality preset that best matches p_scale (render/target ratio).
+	// Useful for callers that want to detect quality changes without calling init.
+	static XeSSQuality quality_for_ratio(float p_scale);
+
 	// scale factor (render_width / target_width).  Automatically selects the XeSS
 	// quality preset that best matches the requested ratio, queries the recommended
 	// input resolution via xessGetOptimalInputResolution, waits for GPU idle, and

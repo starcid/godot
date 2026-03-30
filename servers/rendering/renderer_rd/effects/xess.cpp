@@ -427,12 +427,16 @@ Size2i XeSSEffect::_xess_do_init(XeSSContext *p_ctx, XeSSQuality p_quality, Size
 // Public init interfaces
 // ============================================================================
 
+XeSSEffect::XeSSQuality XeSSEffect::quality_for_ratio(float p_scale) {
+	return (XeSSQuality)(int)_select_quality_setting(p_scale);
+}
+
 Size2i XeSSEffect::init_by_ratio(XeSSContext *p_ctx, float p_upscale_ratio, Size2i p_target_size) {
 	ERR_FAIL_NULL_V(p_ctx, Size2i());
 	ERR_FAIL_COND_V_MSG(p_upscale_ratio <= 0.0f, Size2i(), "XeSS: upscale_ratio must be positive.");
 
 	// Select the quality preset that best matches the requested scale factor.
-	XeSSQuality quality = (XeSSQuality)(int)_select_quality_setting(p_upscale_ratio);
+	XeSSQuality quality = quality_for_ratio(p_upscale_ratio);
 	return _xess_do_init(p_ctx, quality, p_target_size);
 }
 

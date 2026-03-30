@@ -117,19 +117,21 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_xess(Rende
 		xess_context = p_effect->create_context();
 	}
 
-	if (xess_context &&
-			(internal_size != xess_last_internal_size || target_size != xess_last_target_size)) {
+	if (xess_context) {
 		float scale = float(internal_size.x) / float(target_size.x);
-		Size2i recommended = p_effect->init_by_ratio(xess_context, scale, target_size);
-		if (recommended == Size2i()) {
-			// init failed — destroy the unusable context
-			memdelete(xess_context);
-			xess_context = nullptr;
-			xess_last_target_size = Size2i();
-			xess_last_internal_size = Size2i();
-		} else {
-			xess_last_internal_size = internal_size;
-			xess_last_target_size = target_size;
+		int wanted_quality = (int)RendererRD::XeSSEffect::quality_for_ratio(scale);
+		if (wanted_quality != xess_last_quality || target_size != xess_last_target_size) {
+			Size2i recommended = p_effect->init_by_ratio(xess_context, scale, target_size);
+			if (recommended == Size2i()) {
+				// init failed — destroy the unusable context
+				memdelete(xess_context);
+				xess_context = nullptr;
+				xess_last_target_size = Size2i();
+				xess_last_quality = -1;
+			} else {
+				xess_last_quality = wanted_quality;
+				xess_last_target_size = target_size;
+			}
 		}
 	}
 }

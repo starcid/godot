@@ -106,8 +106,9 @@ public:
 #if defined(WINDOWS_ENABLED)
 		RendererRD::XeSSContext *xess_context = nullptr;
 		// Cached values used by ensure_xess to detect when xessInit must be re-called.
+		// A re-init is required when the target output resolution or the quality preset changes.
 		Size2i xess_last_target_size;
-		Size2i xess_last_internal_size;
+		int xess_last_quality = -1; // -1 means "not yet initialized"
 #endif
 
 	public:
