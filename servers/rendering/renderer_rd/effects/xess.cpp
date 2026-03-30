@@ -98,26 +98,6 @@ typedef xess_result_t (*PFN_xessD3D12Execute)(xess_context_handle_t, ID3D12Graph
 
 using namespace RendererRD;
 
-// Pick the XeSS quality preset that best matches the given scale factor
-// (render_width / target_width).  Thresholds are derived from XeSS 1.3+
-// nominal scale factors.
-static xess_quality_settings_t _select_quality_setting(float p_scale) {
-	if (p_scale >= 0.90f) {
-		return XESS_QUALITY_SETTING_AA;
-	} else if (p_scale >= 0.75f) {
-		return XESS_QUALITY_SETTING_ULTRA_QUALITY_PLUS;
-	} else if (p_scale >= 0.65f) {
-		return XESS_QUALITY_SETTING_ULTRA_QUALITY;
-	} else if (p_scale >= 0.57f) {
-		return XESS_QUALITY_SETTING_QUALITY;
-	} else if (p_scale >= 0.47f) {
-		return XESS_QUALITY_SETTING_BALANCED;
-	} else if (p_scale >= 0.40f) {
-		return XESS_QUALITY_SETTING_PERFORMANCE;
-	}
-	return XESS_QUALITY_SETTING_ULTRA_PERFORMANCE;
-}
-
 #ifdef VULKAN_ENABLED
 // Fill an xess_vk_image_view_info from native Vulkan handles.
 static xess_vk_image_view_info _make_image_view_info(
@@ -427,16 +407,57 @@ Size2i XeSSEffect::_xess_do_init(XeSSContext *p_ctx, XeSSQuality p_quality, Size
 // Public init interfaces
 // ============================================================================
 
-XeSSEffect::XeSSQuality XeSSEffect::quality_for_ratio(float p_scale) {
-	return (XeSSQuality)(int)_select_quality_setting(p_scale);
+XeSSEffect::XeSSQuality XeSSEffect::quality_for_ratio(XeSSContext *p_ctx, Size2i p_target_size, float p_scale) const {
+	ERR_FAIL_NULL_V(p_ctx, XESS_QUALITY_BALANCED);
+	ERR_FAIL_NULL_V(p_ctx->handle, XESS_QUALITY_BALANCED);
+	ERR_FAIL_COND_V_MSG(p_target_size.x <= 0 || p_target_size.y <= 0, XESS_QUALITY_BALANCED,
+			"XeSS: quality_for_ratio requires a non-zero target size.");
+	ERR_FAIL_NULL_V_MSG(fn_xessGetOptimalInputResolution, XESS_QUALITY_BALANCED,
+			"XeSS: fn_xessGetOptimalInputResolution is null.");
+
+	static const xess_quality_settings_t k_presets[] = {
+		XESS_QUALITY_SETTING_ULTRA_PERFORMANCE,
+		XESS_QUALITY_SETTING_PERFORMANCE,
+		XESS_QUALITY_SETTING_BALANCED,
+		XESS_QUALITY_SETTING_QUALITY,
+		XESS_QUALITY_SETTING_ULTRA_QUALITY,
+		XESS_QUALITY_SETTING_ULTRA_QUALITY_PLUS,
+		XESS_QUALITY_SETTING_AA,
+	};
+
+	xess_context_handle_t xess_handle = (xess_context_handle_t)p_ctx->handle;
+	xess_2d_t output_res = { (uint32_t)p_target_size.x, (uint32_t)p_target_size.y };
+
+	float best_diff = 1e30f; // sentinel; any valid ratio diff will be smaller
+	xess_quality_settings_t best = XESS_QUALITY_SETTING_BALANCED;
+
+	for (xess_quality_settings_t preset : k_presets) {
+		xess_2d_t input_optimal = {}, input_min = {}, input_max = {};
+		xess_result_t res = ((PFN_xessGetOptimalInputResolution)fn_xessGetOptimalInputResolution)(
+				xess_handle, &output_res, preset, &input_optimal, &input_min, &input_max);
+		if (res != XESS_RESULT_SUCCESS) {
+			print_verbose(vformat("XeSS: quality_for_ratio: xessGetOptimalInputResolution failed for preset %d (code %d).",
+					(int)preset, (int)res));
+			continue;
+		}
+		// Compute what scale ratio this preset produces and pick the closest to p_scale.
+		float preset_ratio = float(input_optimal.x) / float(p_target_size.x);
+		float diff = Math::abs(preset_ratio - p_scale);
+		if (diff < best_diff) {
+			best_diff = diff;
+			best = preset;
+		}
+	}
+
+	return (XeSSQuality)(int)best;
 }
 
 Size2i XeSSEffect::init_by_ratio(XeSSContext *p_ctx, float p_upscale_ratio, Size2i p_target_size) {
 	ERR_FAIL_NULL_V(p_ctx, Size2i());
 	ERR_FAIL_COND_V_MSG(p_upscale_ratio <= 0.0f, Size2i(), "XeSS: upscale_ratio must be positive.");
 
-	// Select the quality preset that best matches the requested scale factor.
-	XeSSQuality quality = quality_for_ratio(p_upscale_ratio);
+	// Select the quality preset that best matches the requested scale factor using the SDK.
+	XeSSQuality quality = quality_for_ratio(p_ctx, p_target_size, p_upscale_ratio);
 	return _xess_do_init(p_ctx, quality, p_target_size);
 }
 

@@ -119,7 +119,7 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_xess(Rende
 
 	if (xess_context) {
 		float scale = float(internal_size.x) / float(target_size.x);
-		int wanted_quality = (int)RendererRD::XeSSEffect::quality_for_ratio(scale);
+		int wanted_quality = (int)p_effect->quality_for_ratio(xess_context, target_size, scale);
 		if (wanted_quality != xess_last_quality || target_size != xess_last_target_size) {
 			Size2i recommended = p_effect->init_by_ratio(xess_context, scale, target_size);
 			if (recommended == Size2i()) {
