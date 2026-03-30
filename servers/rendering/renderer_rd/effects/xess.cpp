@@ -407,7 +407,7 @@ Size2i XeSSEffect::_xess_do_init(XeSSContext *p_ctx, XeSSQuality p_quality, Size
 // Public init interfaces
 // ============================================================================
 
-XeSSEffect::XeSSQuality XeSSEffect::quality_for_ratio(XeSSContext *p_ctx, Size2i p_target_size, float p_scale) const {
+XeSSQuality XeSSEffect::quality_for_ratio(XeSSContext *p_ctx, Size2i p_target_size, float p_scale) const {
 	ERR_FAIL_NULL_V(p_ctx, XESS_QUALITY_BALANCED);
 	ERR_FAIL_NULL_V(p_ctx->handle, XESS_QUALITY_BALANCED);
 	ERR_FAIL_COND_V_MSG(p_target_size.x <= 0 || p_target_size.y <= 0, XESS_QUALITY_BALANCED,
