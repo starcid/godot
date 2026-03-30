@@ -64,6 +64,7 @@ enum XeSSQuality {
 struct XeSSContext {
 	xess_context_handle_t_opaque *handle = nullptr; // xess_context_handle_t
 	void *fn_destroy = nullptr; // PFN_xessDestroyContext — stored to avoid dependency on XeSSEffect
+	bool api_d3d12 = false; // true when created under the D3D12 backend
 	Size2i internal_size;
 	Size2i target_size;
 

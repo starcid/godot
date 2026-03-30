@@ -124,6 +124,37 @@ static xess_vk_image_view_info _make_image_view_info(
 
 XeSSContext::~XeSSContext() {
 	if (handle && fn_destroy) {
+		// xessDestroyContext releases internal GPU resources; the GPU must be idle first.
+		RenderingDevice *rd = RenderingDevice::get_singleton();
+		if (rd) {
+			using RDC = RenderingDeviceCommons;
+#ifdef D3D12_ENABLED
+			if (api_d3d12) {
+				ID3D12Device *d3d12_device = (ID3D12Device *)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_LOGICAL_DEVICE);
+				ID3D12CommandQueue *d3d12_queue = (ID3D12CommandQueue *)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_COMMAND_QUEUE);
+				if (d3d12_device && d3d12_queue) {
+					Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+					if (SUCCEEDED(d3d12_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.GetAddressOf())))) {
+						HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+						if (event) {
+							d3d12_queue->Signal(fence.Get(), 1);
+							fence->SetEventOnCompletion(1, event);
+							WaitForSingleObject(event, INFINITE);
+							CloseHandle(event);
+						}
+					}
+				}
+			}
+#endif // D3D12_ENABLED
+#ifdef VULKAN_ENABLED
+			if (!api_d3d12) {
+				VkDevice vk_device = (VkDevice)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_VULKAN_DEVICE);
+				if (vk_device != VK_NULL_HANDLE) {
+					vkDeviceWaitIdle(vk_device);
+				}
+			}
+#endif // VULKAN_ENABLED
+		}
 		((PFN_xessDestroyContext)fn_destroy)((xess_context_handle_t)handle);
 		handle = nullptr;
 	}
@@ -259,6 +290,7 @@ XeSSContext *XeSSEffect::create_context() {
 		XeSSContext *ctx = memnew(XeSSContext);
 		ctx->handle = (xess_context_handle_t_opaque *)xess_handle;
 		ctx->fn_destroy = fn_xessDestroyContext;
+		ctx->api_d3d12 = true;
 		return ctx;
 	}
 #endif // D3D12_ENABLED
@@ -284,6 +316,7 @@ XeSSContext *XeSSEffect::create_context() {
 		XeSSContext *ctx = memnew(XeSSContext);
 		ctx->handle = (xess_context_handle_t_opaque *)xess_handle;
 		ctx->fn_destroy = fn_xessDestroyContext;
+		ctx->api_d3d12 = false;
 		return ctx;
 	}
 #endif // VULKAN_ENABLED
