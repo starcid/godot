@@ -48,6 +48,18 @@ namespace RendererRD {
 // Opaque pointer for the XeSS context handle (avoids pulling in xess.h).
 typedef struct _xess_context_handle_t *xess_context_handle_t_opaque;
 
+// XeSS quality preset, mirrors xess_quality_settings_t from the XeSS SDK.
+// Values are kept identical so they can be cast directly without a mapping table.
+enum XeSSQuality {
+	XESS_QUALITY_ULTRA_PERFORMANCE = 100,
+	XESS_QUALITY_PERFORMANCE = 101,
+	XESS_QUALITY_BALANCED = 102,
+	XESS_QUALITY_QUALITY = 103,
+	XESS_QUALITY_ULTRA_QUALITY = 104,
+	XESS_QUALITY_ULTRA_QUALITY_PLUS = 105,
+	XESS_QUALITY_AA = 106,
+};
+
 // Opaque context holding the per-viewport XeSS handle.
 struct XeSSContext {
 	xess_context_handle_t_opaque *handle = nullptr; // xess_context_handle_t
@@ -79,7 +91,25 @@ public:
 	XeSSEffect();
 	~XeSSEffect();
 
-	XeSSContext *create_context(Size2i p_internal_size, Size2i p_target_size);
+	// Creates a raw XeSS context handle. No GPU resources are allocated yet.
+	// Call init_by_ratio() or init_by_quality() afterwards (and whenever the
+	// scale or quality needs to change at runtime).
+	XeSSContext *create_context();
+
+	// Initialise (or re-initialise) a context by specifying the render-to-output
+	// scale factor (render_width / target_width).  Automatically selects the XeSS
+	// quality preset that best matches the requested ratio, queries the recommended
+	// input resolution via xessGetOptimalInputResolution, waits for GPU idle, and
+	// calls xessInit.  Returns the recommended internal (render) resolution, or
+	// Size2i(0,0) on failure.
+	Size2i init_by_ratio(XeSSContext *p_ctx, float p_upscale_ratio, Size2i p_target_size);
+
+	// Initialise (or re-initialise) a context with an explicit quality preset.
+	// Queries the recommended input resolution, waits for GPU idle, and calls
+	// xessInit.  Returns the recommended internal (render) resolution, or
+	// Size2i(0,0) on failure.
+	Size2i init_by_quality(XeSSContext *p_ctx, XeSSQuality p_quality, Size2i p_target_size);
+
 	void upscale(const Parameters &p_params);
 
 private:
@@ -159,6 +189,7 @@ private:
 	void *fn_xessDestroyContext = nullptr;
 	void *fn_xessGetVersion = nullptr;
 	void *fn_xessSetVelocityScale = nullptr;
+	void *fn_xessGetOptimalInputResolution = nullptr;
 
 #ifdef VULKAN_ENABLED
 	// Vulkan-specific function pointers.
@@ -176,6 +207,12 @@ private:
 
 	bool _load_library();
 	void _unload_library();
+
+	// Shared init implementation: waits for GPU idle, queries optimal input size via
+	// xessGetOptimalInputResolution, calls the backend-specific xessInit, sets velocity
+	// scale, and updates the context's cached sizes.  Returns the recommended internal
+	// resolution, or Size2i(0,0) on failure.
+	Size2i _xess_do_init(XeSSContext *p_ctx, XeSSQuality p_quality, Size2i p_target_size);
 };
 
 } // namespace RendererRD

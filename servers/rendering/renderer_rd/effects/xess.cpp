@@ -80,6 +80,7 @@
 typedef xess_result_t (*PFN_xessDestroyContext)(xess_context_handle_t);
 typedef xess_result_t (*PFN_xessGetVersion)(xess_version_t *);
 typedef xess_result_t (*PFN_xessSetVelocityScale)(xess_context_handle_t, float, float);
+typedef xess_result_t (*PFN_xessGetOptimalInputResolution)(xess_context_handle_t, const xess_2d_t *, xess_quality_settings_t, xess_2d_t *, xess_2d_t *, xess_2d_t *);
 
 #ifdef VULKAN_ENABLED
 typedef xess_result_t (*PFN_xessVKCreateContext)(VkInstance, VkPhysicalDevice, VkDevice, xess_context_handle_t *);
@@ -200,6 +201,7 @@ bool XeSSEffect::_load_library() {
 	XESS_LOAD_SYMBOL(xessDestroyContext);
 	XESS_LOAD_SYMBOL(xessGetVersion);
 	XESS_LOAD_SYMBOL(xessSetVelocityScale);
+	XESS_LOAD_SYMBOL(xessGetOptimalInputResolution);
 
 #ifdef VULKAN_ENABLED
 	if (!api_d3d12) {
@@ -236,6 +238,7 @@ void XeSSEffect::_unload_library() {
 		fn_xessDestroyContext = nullptr;
 		fn_xessGetVersion = nullptr;
 		fn_xessSetVelocityScale = nullptr;
+		fn_xessGetOptimalInputResolution = nullptr;
 #ifdef VULKAN_ENABLED
 		fn_xessVKCreateContext = nullptr;
 		fn_xessVKInit = nullptr;
@@ -253,7 +256,7 @@ void XeSSEffect::_unload_library() {
 // Context creation
 // ============================================================================
 
-XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_size) {
+XeSSContext *XeSSEffect::create_context() {
 	ERR_FAIL_COND_V_MSG(!is_available(), nullptr, "XeSS: Library not loaded.");
 
 	RenderingDevice *rd = RenderingDevice::get_singleton();
@@ -261,39 +264,102 @@ XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_
 
 	using RDC = RenderingDeviceCommons;
 
-	float scale = float(p_internal_size.x) / float(p_target_size.x);
-	xess_quality_settings_t quality = _select_quality_setting(scale);
-	// Both Vulkan and D3D12 renderers use reverse-Z depth.
-	uint32_t init_flags = XESS_INIT_FLAG_INVERTED_DEPTH | XESS_INIT_FLAG_ENABLE_AUTOEXPOSURE;
-
 #ifdef D3D12_ENABLED
 	if (api_d3d12) {
 		ID3D12Device *d3d12_device = (ID3D12Device *)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_LOGICAL_DEVICE);
 		ERR_FAIL_COND_V_MSG(!d3d12_device, nullptr, "XeSS: Failed to get ID3D12Device.");
-
-		// xessD3D12Init creates internal GPU resources and requires the command queue to be idle.
-		// Signal a fence on the main queue and wait for completion before proceeding.
-		{
-			ID3D12CommandQueue *d3d12_queue = (ID3D12CommandQueue *)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_COMMAND_QUEUE);
-			if (d3d12_queue) {
-				Microsoft::WRL::ComPtr<ID3D12Fence> fence;
-				if (SUCCEEDED(d3d12_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.GetAddressOf())))) {
-					HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-					if (event) {
-						d3d12_queue->Signal(fence.Get(), 1);
-						fence->SetEventOnCompletion(1, event);
-						WaitForSingleObject(event, INFINITE);
-						CloseHandle(event);
-					}
-				}
-			}
-		}
 
 		xess_context_handle_t xess_handle = nullptr;
 		xess_result_t result = ((PFN_xessD3D12CreateContext)fn_xessD3D12CreateContext)(d3d12_device, &xess_handle);
 		if (result != XESS_RESULT_SUCCESS) {
 			print_error(vformat("XeSS: xessD3D12CreateContext failed with code %d.", (int)result));
 			return nullptr;
+		}
+
+		XeSSContext *ctx = memnew(XeSSContext);
+		ctx->handle = (xess_context_handle_t_opaque *)xess_handle;
+		ctx->fn_destroy = fn_xessDestroyContext;
+		return ctx;
+	}
+#endif // D3D12_ENABLED
+
+#ifdef VULKAN_ENABLED
+	if (!api_d3d12) {
+		VkInstance vk_instance = (VkInstance)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_VULKAN_INSTANCE);
+		VkPhysicalDevice vk_physical_device = (VkPhysicalDevice)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_VULKAN_PHYSICAL_DEVICE);
+		VkDevice vk_device = (VkDevice)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_VULKAN_DEVICE);
+
+		ERR_FAIL_COND_V_MSG(vk_instance == VK_NULL_HANDLE, nullptr, "XeSS: Failed to get VkInstance.");
+		ERR_FAIL_COND_V_MSG(vk_physical_device == VK_NULL_HANDLE, nullptr, "XeSS: Failed to get VkPhysicalDevice.");
+		ERR_FAIL_COND_V_MSG(vk_device == VK_NULL_HANDLE, nullptr, "XeSS: Failed to get VkDevice.");
+
+		xess_context_handle_t xess_handle = nullptr;
+		xess_result_t result = ((PFN_xessVKCreateContext)fn_xessVKCreateContext)(
+				vk_instance, vk_physical_device, vk_device, &xess_handle);
+		if (result != XESS_RESULT_SUCCESS) {
+			print_error(vformat("XeSS: xessVKCreateContext failed with code %d.", (int)result));
+			return nullptr;
+		}
+
+		XeSSContext *ctx = memnew(XeSSContext);
+		ctx->handle = (xess_context_handle_t_opaque *)xess_handle;
+		ctx->fn_destroy = fn_xessDestroyContext;
+		return ctx;
+	}
+#endif // VULKAN_ENABLED
+
+	ERR_FAIL_V_MSG(nullptr, "XeSS: create_context called but no matching runtime API backend (neither D3D12 nor Vulkan is active).");
+}
+
+// ============================================================================
+// Shared init helper — waits for GPU idle, calls xessInit, updates context.
+// ============================================================================
+
+Size2i XeSSEffect::_xess_do_init(XeSSContext *p_ctx, XeSSQuality p_quality, Size2i p_target_size) {
+	ERR_FAIL_NULL_V(p_ctx, Size2i());
+	ERR_FAIL_NULL_V_MSG(p_ctx->handle, Size2i(), "XeSS: context handle is null.");
+	ERR_FAIL_COND_V_MSG(!is_available(), Size2i(), "XeSS: Library not loaded.");
+
+	xess_context_handle_t xess_handle = (xess_context_handle_t)p_ctx->handle;
+	xess_quality_settings_t quality = (xess_quality_settings_t)p_quality;
+
+	// Query the optimal input (render) resolution for the requested quality setting.
+	ERR_FAIL_NULL_V_MSG(fn_xessGetOptimalInputResolution, Size2i(), "XeSS: fn_xessGetOptimalInputResolution is null.");
+	xess_2d_t output_res = { (uint32_t)p_target_size.x, (uint32_t)p_target_size.y };
+	xess_2d_t input_optimal = {}, input_min = {}, input_max = {};
+	xess_result_t result = ((PFN_xessGetOptimalInputResolution)fn_xessGetOptimalInputResolution)(
+			xess_handle, &output_res, quality, &input_optimal, &input_min, &input_max);
+	if (result != XESS_RESULT_SUCCESS) {
+		print_error(vformat("XeSS: xessGetOptimalInputResolution failed with code %d.", (int)result));
+		return Size2i();
+	}
+	Size2i internal_size = Size2i((int)input_optimal.x, (int)input_optimal.y);
+
+	// Both Vulkan and D3D12 renderers use reverse-Z depth.
+	uint32_t init_flags = XESS_INIT_FLAG_INVERTED_DEPTH | XESS_INIT_FLAG_ENABLE_AUTOEXPOSURE;
+
+	RenderingDevice *rd = RenderingDevice::get_singleton();
+	ERR_FAIL_NULL_V(rd, Size2i());
+	using RDC = RenderingDeviceCommons;
+
+#ifdef D3D12_ENABLED
+	if (api_d3d12) {
+		ID3D12Device *d3d12_device = (ID3D12Device *)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_LOGICAL_DEVICE);
+		ERR_FAIL_COND_V_MSG(!d3d12_device, Size2i(), "XeSS: Failed to get ID3D12Device.");
+
+		// xessD3D12Init allocates internal GPU resources; the command queue must be idle.
+		ID3D12CommandQueue *d3d12_queue = (ID3D12CommandQueue *)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_COMMAND_QUEUE);
+		if (d3d12_queue) {
+			Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+			if (SUCCEEDED(d3d12_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.GetAddressOf())))) {
+				HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+				if (event) {
+					d3d12_queue->Signal(fence.Get(), 1);
+					fence->SetEventOnCompletion(1, event);
+					WaitForSingleObject(event, INFINITE);
+					CloseHandle(event);
+				}
+			}
 		}
 
 		xess_d3d12_init_params_t init_params = {};
@@ -309,44 +375,25 @@ XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_
 		result = ((PFN_xessD3D12Init)fn_xessD3D12Init)(xess_handle, &init_params);
 		if (result != XESS_RESULT_SUCCESS) {
 			print_error(vformat("XeSS: xessD3D12Init failed with code %d.", (int)result));
-			((PFN_xessDestroyContext)fn_xessDestroyContext)(xess_handle);
-			return nullptr;
+			return Size2i();
 		}
 
-		// Godot stores velocity as UV-space displacement (fraction of viewport size, range [0,1]).
-		// XeSS expects pixel-space velocity by default, so scale by the internal resolution to convert.
-		ERR_FAIL_NULL_V_MSG(fn_xessSetVelocityScale, nullptr, "XeSS: fn_xessSetVelocityScale is null; symbol was not loaded correctly.");
-		((PFN_xessSetVelocityScale)fn_xessSetVelocityScale)(xess_handle, float(p_internal_size.x), float(p_internal_size.y));
+		ERR_FAIL_NULL_V_MSG(fn_xessSetVelocityScale, Size2i(), "XeSS: fn_xessSetVelocityScale is null.");
+		((PFN_xessSetVelocityScale)fn_xessSetVelocityScale)(xess_handle, float(internal_size.x), float(internal_size.y));
 
-		XeSSContext *ctx = memnew(XeSSContext);
-		ctx->handle = (xess_context_handle_t_opaque *)xess_handle;
-		ctx->fn_destroy = fn_xessDestroyContext;
-		ctx->internal_size = p_internal_size;
-		ctx->target_size = p_target_size;
-		return ctx;
+		p_ctx->internal_size = internal_size;
+		p_ctx->target_size = p_target_size;
+		return internal_size;
 	}
 #endif // D3D12_ENABLED
 
 #ifdef VULKAN_ENABLED
 	if (!api_d3d12) {
-		VkInstance vk_instance = (VkInstance)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_VULKAN_INSTANCE);
-		VkPhysicalDevice vk_physical_device = (VkPhysicalDevice)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_VULKAN_PHYSICAL_DEVICE);
 		VkDevice vk_device = (VkDevice)(uintptr_t)rd->get_driver_resource(RDC::DRIVER_RESOURCE_VULKAN_DEVICE);
+		ERR_FAIL_COND_V_MSG(vk_device == VK_NULL_HANDLE, Size2i(), "XeSS: Failed to get VkDevice.");
 
-		ERR_FAIL_COND_V_MSG(vk_instance == VK_NULL_HANDLE, nullptr, "XeSS: Failed to get VkInstance.");
-		ERR_FAIL_COND_V_MSG(vk_physical_device == VK_NULL_HANDLE, nullptr, "XeSS: Failed to get VkPhysicalDevice.");
-		ERR_FAIL_COND_V_MSG(vk_device == VK_NULL_HANDLE, nullptr, "XeSS: Failed to get VkDevice.");
-
-		// xessVKInit creates internal GPU resources and requires all pending GPU work to be done.
+		// xessVKInit allocates internal GPU resources; all pending GPU work must be done first.
 		vkDeviceWaitIdle(vk_device);
-
-		xess_context_handle_t xess_handle = nullptr;
-		xess_result_t result = ((PFN_xessVKCreateContext)fn_xessVKCreateContext)(
-				vk_instance, vk_physical_device, vk_device, &xess_handle);
-		if (result != XESS_RESULT_SUCCESS) {
-			print_error(vformat("XeSS: xessVKCreateContext failed with code %d.", (int)result));
-			return nullptr;
-		}
 
 		xess_vk_init_params_t init_params = {};
 		init_params.outputResolution = { (uint32_t)p_target_size.x, (uint32_t)p_target_size.y };
@@ -361,25 +408,37 @@ XeSSContext *XeSSEffect::create_context(Size2i p_internal_size, Size2i p_target_
 		result = ((PFN_xessVKInit)fn_xessVKInit)(xess_handle, &init_params);
 		if (result != XESS_RESULT_SUCCESS) {
 			print_error(vformat("XeSS: xessVKInit failed with code %d.", (int)result));
-			((PFN_xessDestroyContext)fn_xessDestroyContext)(xess_handle);
-			return nullptr;
+			return Size2i();
 		}
 
-		// Godot stores velocity as UV-space displacement (fraction of viewport size, range [0,1]).
-		// XeSS expects pixel-space velocity by default, so scale by the internal resolution to convert.
-		ERR_FAIL_NULL_V_MSG(fn_xessSetVelocityScale, nullptr, "XeSS: fn_xessSetVelocityScale is null; symbol was not loaded correctly.");
-		((PFN_xessSetVelocityScale)fn_xessSetVelocityScale)(xess_handle, float(p_internal_size.x), float(p_internal_size.y));
+		ERR_FAIL_NULL_V_MSG(fn_xessSetVelocityScale, Size2i(), "XeSS: fn_xessSetVelocityScale is null.");
+		((PFN_xessSetVelocityScale)fn_xessSetVelocityScale)(xess_handle, float(internal_size.x), float(internal_size.y));
 
-		XeSSContext *ctx = memnew(XeSSContext);
-		ctx->handle = (xess_context_handle_t_opaque *)xess_handle;
-		ctx->fn_destroy = fn_xessDestroyContext;
-		ctx->internal_size = p_internal_size;
-		ctx->target_size = p_target_size;
-		return ctx;
+		p_ctx->internal_size = internal_size;
+		p_ctx->target_size = p_target_size;
+		return internal_size;
 	}
 #endif // VULKAN_ENABLED
 
-	ERR_FAIL_V_MSG(nullptr, "XeSS: create_context called but no matching runtime API backend (neither D3D12 nor Vulkan is active).");
+	ERR_FAIL_V_MSG(Size2i(), "XeSS: _xess_do_init called but no matching runtime API backend.");
+}
+
+// ============================================================================
+// Public init interfaces
+// ============================================================================
+
+Size2i XeSSEffect::init_by_ratio(XeSSContext *p_ctx, float p_upscale_ratio, Size2i p_target_size) {
+	ERR_FAIL_NULL_V(p_ctx, Size2i());
+	ERR_FAIL_COND_V_MSG(p_upscale_ratio <= 0.0f, Size2i(), "XeSS: upscale_ratio must be positive.");
+
+	// Select the quality preset that best matches the requested scale factor.
+	XeSSQuality quality = (XeSSQuality)(int)_select_quality_setting(p_upscale_ratio);
+	return _xess_do_init(p_ctx, quality, p_target_size);
+}
+
+Size2i XeSSEffect::init_by_quality(XeSSContext *p_ctx, XeSSQuality p_quality, Size2i p_target_size) {
+	ERR_FAIL_NULL_V(p_ctx, Size2i());
+	return _xess_do_init(p_ctx, p_quality, p_target_size);
 }
 
 // ============================================================================
