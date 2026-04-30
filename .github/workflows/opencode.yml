@@ -25,6 +25,35 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Set up .NET (for C#)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
+      - name: Install LSP servers
+        run: |
+          # Python LSP (pylsp)
+          pip install python-lsp-server
+
+          # C++ LSP (clangd)
+          sudo apt-get update -qq
+          sudo apt-get install -y clangd
+
+          # C# LSP (OmniSharp)
+          dotnet tool install --global csharp-ls
+
+          # GDScript LSP (bundled with Godot, download headless binary)
+          GODOT_VERSION="4.4.1"
+          wget -q "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" -O godot.zip
+          unzip -q godot.zip
+          sudo mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 /usr/local/bin/godot
+          sudo chmod +x /usr/local/bin/godot
+
       - name: Run opencode
         uses: anomalyco/opencode/github@latest
         env:
