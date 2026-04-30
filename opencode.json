@@ -3,6 +3,9 @@
   "provider": {
     "github-copilot": {
       "models": {
+        "claude-sonnet-4-6": {
+          "name": "Claude Sonnet 4.6 (Copilot)"
+        },
         "claude-sonnet-4-5": {
           "name": "Claude Sonnet 4.5 (Copilot)"
         },
@@ -12,7 +15,7 @@
       }
     }
   },
-  "model": "github-copilot/claude-sonnet-4-5",
+  "model": "github-copilot/claude-sonnet-4-6",
   "lsp": {
     "clangd": {},
     "csharp": {},
