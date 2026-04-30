@@ -22,7 +22,7 @@
 		"pyright": {},
 		"gdscript": {
 			"command": ["godot", "--editor", "--path", "modules/gdscript/tests/scripts", "--lsp-port", "6005"],
-			"extensions": [".gd", ".gdscript"]
+			"extensions": [".gd"]
 		}
 	}
 }
