@@ -21,7 +21,7 @@
 		"csharp": {},
 		"pyright": {},
 		"gdscript": {
-			"command": ["godot", "--lsp-port", "6005", "--headless"],
+			"command": ["godot", "--editor", "--path", "modules/gdscript/tests/scripts", "--lsp-port", "6005"],
 			"extensions": [".gd", ".gdscript"]
 		}
 	}
