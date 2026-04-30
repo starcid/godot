@@ -17,9 +17,18 @@
 	},
 	"model": "github-copilot/claude-sonnet-4-6",
 	"lsp": {
-		"clangd": {},
-		"csharp": {},
-		"pyright": {},
+		"clangd": {
+			"command": ["/home/work/.local/bin/clangd"]
+		},
+		"csharp": {
+			"command": ["/home/work/.local/omnisharp/OmniSharp", "-lsp"],
+			"env": {
+				"DOTNET_ROOT": "/home/work/.dotnet"
+			}
+		},
+		"pyright": {
+			"command": ["/home/work/.nvm/versions/node/v24.15.0/bin/pyright-langserver", "--stdio"]
+		},
 		"gdscript": {
 			"command": ["godot", "--editor", "--path", "modules/gdscript/tests/scripts", "--lsp-port", "6005"],
 			"extensions": [".gd"]
